@@ -1,3 +1,5 @@
+const { aggregateWeeklyHours } = require("./time-tracking");
+
 const HANDSHAKE_ORIGIN = "https://ai.joinhandshake.com";
 const DEFAULT_REFERER = `${HANDSHAKE_ORIGIN}/fellow/projects`;
 const PAGE_SIZE = 10;
@@ -557,6 +559,55 @@ function fetchAllTasksForProject(projectId, storageState, options = {}) {
   return fetchAllTasks(projectId, storageState, options);
 }
 
+async function fetchWeeklyHoursDashboard(storageState, options = {}) {
+  const _fetchProfile = options.fetchProfile || fetchProfile;
+  const _listProjects = options.listProjects || listProjects;
+  const _fetchTasks = options.fetchAllTasksForProject || fetchAllTasksForProject;
+  const _getHoursWorked = options.getHoursWorked || getHoursWorked;
+  const now = options.now || (() => new Date().toISOString());
+
+  const profile = await _fetchProfile(storageState, options);
+  const profileId = profile?.id;
+  if (!profileId) throw new Error("Could not resolve profile id.");
+
+  const projects = await _listProjects(storageState, profileId, options);
+  const warnings = [];
+  const allTasks = [];
+  const projectSummaries = [];
+
+  for (const project of projects) {
+    try {
+      const tasks = await _fetchTasks(project.id, storageState, options);
+      allTasks.push(...tasks);
+      const myTaskCount = tasks.filter((t) =>
+        (t.annotationProjectActivities || []).some((a) => a.profileId === profileId)
+      ).length;
+      projectSummaries.push({ ...project, taskCount: myTaskCount });
+    } catch (err) {
+      warnings.push(`Could not load tasks for ${project.name}: ${err.message}`);
+      projectSummaries.push({ ...project, taskCount: 0 });
+    }
+  }
+
+  const { weeks, totals } = aggregateWeeklyHours(allTasks, profileId);
+  let lifetime = { totalHours: 0, totalSeconds: 0 };
+  try {
+    lifetime = await _getHoursWorked(storageState, profileId, options);
+  } catch (err) {
+    warnings.push(`Could not load lifetime hours: ${err.message}`);
+  }
+
+  return {
+    generatedAt: now(),
+    profile: { id: profileId, name: profile.name || profile.fullName || "User" },
+    lifetime,
+    weeks,
+    totals,
+    projects: projectSummaries,
+    warnings,
+  };
+}
+
 function normalizeProjectList(data, kind) {
   const list = data?.annotationProjects || data?.projects || [];
   return (Array.isArray(list) ? list : [])
@@ -592,6 +643,7 @@ module.exports = {
   fetchAllTasks,
   fetchAllTasksForProject,
   fetchDashboardForProject,
+  fetchWeeklyHoursDashboard,
   getHoursWorked,
   listProjects,
   fetchPastProjectTaskHistory,

@@ -471,3 +471,56 @@ test("fetchAllTasksForProject pages raw tasks for a project id", async () => {
   });
   assert.deepEqual(tasks.map((t) => t.id), ["t1"]);
 });
+
+const { fetchWeeklyHoursDashboard } = require("./platform-api");
+
+test("fetchWeeklyHoursDashboard aggregates tasks across all projects", async () => {
+  const deps = {
+    fetchProfile: async () => ({ id: "me", name: "Ming" }),
+    listProjects: async () => [
+      { id: "pA", name: "Project Baseball", kind: "active" },
+      { id: "pB", name: "Project Fade", kind: "active" },
+    ],
+    fetchAllTasksForProject: async (projectId) => {
+      if (projectId === "pA") {
+        return [{ id: "a1", annotationProjectActivities: [
+          { profileId: "me", timeWorkedInSeconds: 3600, createdAt: "2026-05-18T09:00:00Z" }] }];
+      }
+      return [{ id: "b1", annotationProjectActivities: [
+        { profileId: "me", timeWorkedInSeconds: 1800, createdAt: "2026-05-19T09:00:00Z" }] }];
+    },
+    getHoursWorked: async () => ({ totalSeconds: 5400, totalHours: 1.5 }),
+    now: () => "2026-06-10T00:00:00.000Z",
+  };
+  const result = await fetchWeeklyHoursDashboard(STORAGE, deps);
+  assert.equal(result.profile.name, "Ming");
+  assert.equal(result.lifetime.totalHours, 1.5);
+  assert.equal(result.totals.seconds, 5400);
+  assert.equal(result.weeks[0].weekStart, "2026-05-18");
+  assert.deepEqual(result.projects.map((p) => [p.name, p.taskCount]), [
+    ["Project Baseball", 1], ["Project Fade", 1],
+  ]);
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.generatedAt, "2026-06-10T00:00:00.000Z");
+});
+
+test("fetchWeeklyHoursDashboard records a warning when one project fails", async () => {
+  const deps = {
+    fetchProfile: async () => ({ id: "me", name: "Ming" }),
+    listProjects: async () => [
+      { id: "ok", name: "Good", kind: "active" },
+      { id: "bad", name: "Broken", kind: "past" },
+    ],
+    fetchAllTasksForProject: async (projectId) => {
+      if (projectId === "bad") throw new Error("status 500");
+      return [{ id: "x", annotationProjectActivities: [
+        { profileId: "me", timeWorkedInSeconds: 3600, createdAt: "2026-05-18T09:00:00Z" }] }];
+    },
+    getHoursWorked: async () => ({ totalSeconds: 3600, totalHours: 1 }),
+    now: () => "2026-06-10T00:00:00.000Z",
+  };
+  const result = await fetchWeeklyHoursDashboard(STORAGE, deps);
+  assert.equal(result.totals.seconds, 3600);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /Broken/);
+});
