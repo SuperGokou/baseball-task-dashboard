@@ -1,0 +1,13 @@
+{
+  "name": "baseball-task-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local weekly-hours dashboard for HAI fellow tasks across all projects.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}
