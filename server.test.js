@@ -5,7 +5,7 @@ const {
   createAppServer,
   createSessionId,
   createSessionStore,
-  getHelixProject,
+  getLoginStartUrl,
   launchLoginSession,
   parseCookies,
 } = require("./server");
@@ -67,11 +67,6 @@ test("createAppServer returns an HTTP server instance", () => {
   server.close();
 });
 
-test("getHelixProject reads the configured Project Helix URL", () => {
-  assert.deepEqual(getHelixProject(), {
-    id: "26a53071-8843-4138-97df-430bd3e4cd45",
-    name: "Project Helix",
-    projectUrl:
-      "https://ai.joinhandshake.com/fellow/projects/past/26a53071-8843-4138-97df-430bd3e4cd45",
-  });
+test("getLoginStartUrl returns the fellow projects landing URL", () => {
+  assert.equal(getLoginStartUrl(), "https://ai.joinhandshake.com/fellow/projects");
 });

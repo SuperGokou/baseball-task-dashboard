@@ -8,7 +8,6 @@ const handshakeApi = require("./platform-api");
 const DEFAULT_PORT = Number(process.env.PORT || 4173);
 const SESSION_COOKIE = "hai_session";
 const WEB_DIR = path.join(__dirname, "web");
-const CONFIG_PATH = path.join(__dirname, "config.json");
 const AUTH_PATH = path.join(__dirname, "auth.json");
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
@@ -205,25 +204,8 @@ function ensureSession(req, res, sessions) {
   return sessionId;
 }
 
-function getHelixProject() {
-  const fallbackUrl =
-    "https://ai.joinhandshake.com/fellow/projects/past/26a53071-8843-4138-97df-430bd3e4cd45";
-  let projectUrl = fallbackUrl;
-
-  if (fs.existsSync(CONFIG_PATH)) {
-    try {
-      const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-      projectUrl = config.projectTasksUrl || fallbackUrl;
-    } catch {
-      projectUrl = fallbackUrl;
-    }
-  }
-
-  return {
-    id: handshakeApi.normalizeProjectInput(projectUrl).projectId,
-    name: "Project Helix",
-    projectUrl,
-  };
+function getLoginStartUrl() {
+  return "https://ai.joinhandshake.com/fellow/projects";
 }
 
 async function launchLoginSession(chromium, log = console.log) {
@@ -255,7 +237,7 @@ function createLoginManager(options = {}) {
     const loginSession = await launchLoginSession(chromium);
     const { context, browser } = loginSession;
     const page = context.pages()[0] || (await context.newPage());
-    const targetUrl = startUrl || getHelixProject().projectUrl;
+    const targetUrl = startUrl || getLoginStartUrl();
     const targetOrigin = new URL(targetUrl).origin;
 
     const flow = {
@@ -436,7 +418,7 @@ function createAppServer(options = {}) {
         const body = await readRequestBody(req);
         const result = await loginManager.start(
           sessionId,
-          body.startUrl || getHelixProject().projectUrl,
+          body.startUrl || getLoginStartUrl(),
           (authState) => {
             sessions.setAuth(sessionId, authState);
             saveAuthToDisk(authState);
@@ -481,16 +463,8 @@ function createAppServer(options = {}) {
           sendJson(res, 401, { error: "Sign in first." });
           return;
         }
-
-        const body = await readRequestBody(req);
-        const helixProject = getHelixProject();
-
         try {
-          const dashboard = await api.fetchDashboardForProject(
-            body.projectInput || helixProject.projectUrl,
-            session.authState,
-            { project: { id: helixProject.id, name: helixProject.name } }
-          );
+          const dashboard = await api.fetchWeeklyHoursDashboard(session.authState);
           sendJson(res, 200, dashboard);
         } catch (err) {
           if (/expired|401|403/i.test(err.message)) {
@@ -533,7 +507,7 @@ module.exports = {
   createAppServer,
   createSessionId,
   createSessionStore,
-  getHelixProject,
+  getLoginStartUrl,
   closeLoginSession,
   launchLoginSession,
   parseCookies,
