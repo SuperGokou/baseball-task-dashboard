@@ -35,6 +35,7 @@ const state = {
   selectedRange: "all",
   selectedStage: "all",
   searchText: "",
+  selectedDay: null,
 };
 
 function showMessage(text) {
@@ -79,7 +80,8 @@ function formatDay(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  // Days are bucketed in UTC; format in UTC so the label matches the bucket.
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 function formatDuration(seconds) {
@@ -162,6 +164,7 @@ function currentView() {
   const days = base.days.filter((x) => inRange(x.day));
   const search = state.searchText.trim().toLowerCase();
   let tasks = base.tasks.filter((t) => inRange(t.date));
+  if (state.selectedDay) tasks = tasks.filter((t) => (t.date || "").slice(0, 10) === state.selectedDay);
   if (state.selectedStage !== "all") tasks = tasks.filter((t) => (t.stage || "") === state.selectedStage);
   if (search) {
     tasks = tasks.filter((t) =>
@@ -170,15 +173,20 @@ function currentView() {
   }
   tasks.sort(sortTasks);
 
-  const sumSeconds = days.reduce((s, x) => s + x.seconds, 0);
+  // Headline reflects the clicked day if one is selected, else the whole range.
+  const headlineSeconds = state.selectedDay
+    ? days.filter((d2) => d2.day === state.selectedDay).reduce((s, x) => s + x.seconds, 0)
+    : days.reduce((s, x) => s + x.seconds, 0);
   const taskWord = `${tasks.length} task${tasks.length === 1 ? "" : "s"}`;
-  const sub = base.isAll
-    ? cutoff
-      ? taskWord
-      : `${taskWord} · ${formatHM((base.lifetime || 0) * 3600)} lifetime`
-    : `${taskWord}${base.kind ? " · " + base.kind : ""}`;
+  const sub = state.selectedDay
+    ? `${formatDay(state.selectedDay)} · ${taskWord}`
+    : base.isAll
+      ? cutoff
+        ? taskWord
+        : `${taskWord} · ${formatHM((base.lifetime || 0) * 3600)} lifetime`
+      : `${taskWord}${base.kind ? " · " + base.kind : ""}`;
 
-  return { days, tasks, headline: formatHM(sumSeconds), sub };
+  return { days, tasks, headline: formatHM(headlineSeconds), sub };
 }
 
 function sortTasks(a, b) {
@@ -242,8 +250,9 @@ function renderChart(days) {
       const cx = padL + slot * (i + 0.5);
       const h = d.hours > 0 ? Math.max(2, (d.hours / niceMax) * plotH) : 0;
       const y = padT + plotH - h;
+      const sel = d.day === state.selectedDay ? " bar-selected" : "";
       const rect = h > 0
-        ? `<rect class="bar" data-day="${d.day}" data-hours="${d.hours}" data-tasks="${d.taskCount}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${formatHM(d.hours * 3600)} · ${d.taskCount} tasks</title></rect>`
+        ? `<rect class="bar${sel}" data-day="${d.day}" data-hours="${d.hours}" data-tasks="${d.taskCount}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${formatHM(d.hours * 3600)} · ${d.taskCount} tasks</title></rect>`
         : "";
       const lab = i % labelEvery === 0
         ? `<text class="x-label" x="${cx.toFixed(1)}" y="${VBH - 16}" text-anchor="middle">${escapeHtml(dayLabelOf(d.day))}</text>`
@@ -367,7 +376,10 @@ function renderCurrentView() {
   elements.totalSub.textContent = view.sub;
   renderChart(view.days);
   renderTasks(view.tasks);
-  elements.tasksMeta.textContent = `${view.tasks.length} task${view.tasks.length === 1 ? "" : "s"}`;
+  const taskWord = `${view.tasks.length} task${view.tasks.length === 1 ? "" : "s"}`;
+  elements.tasksMeta.innerHTML = state.selectedDay
+    ? `<span class="day-chip">${escapeHtml(formatDay(state.selectedDay))}</span> ${taskWord} <button type="button" class="meta-clear" id="clear-day">clear</button>`
+    : taskWord;
 }
 
 function renderDashboard(d) {
@@ -467,10 +479,12 @@ elements.refreshButton?.addEventListener("click", loadDashboard);
 elements.messageDismiss?.addEventListener("click", clearMessage);
 elements.projectFilter?.addEventListener("change", (e) => {
   state.selectedProjectId = e.target.value;
+  state.selectedDay = null;
   renderCurrentView();
 });
 elements.rangeFilter?.addEventListener("change", (e) => {
   state.selectedRange = e.target.value;
+  state.selectedDay = null;
   renderCurrentView();
 });
 elements.stageFilter?.addEventListener("change", (e) => {
@@ -481,10 +495,34 @@ elements.taskSearch?.addEventListener("input", (e) => {
   state.searchText = e.target.value;
   renderCurrentView();
 });
+// Click a bar to filter the task list (and headline) to that day; click it again
+// or click empty chart space to clear.
 elements.hoursChart?.addEventListener("click", (e) => {
   const bar = e.target.closest(".bar");
-  if (bar) showChartTooltip(bar);
-  else hideChartTooltip();
+  if (!bar) {
+    if (state.selectedDay) {
+      state.selectedDay = null;
+      renderCurrentView();
+    }
+    hideChartTooltip();
+    return;
+  }
+  const day = bar.getAttribute("data-day");
+  state.selectedDay = state.selectedDay === day ? null : day;
+  renderCurrentView();
+  if (state.selectedDay) {
+    const active = elements.hoursChart.querySelector(`.bar[data-day="${state.selectedDay}"]`);
+    if (active) showChartTooltip(active);
+  } else {
+    hideChartTooltip();
+  }
+});
+elements.tasksMeta?.addEventListener("click", (e) => {
+  if (e.target.closest("#clear-day")) {
+    state.selectedDay = null;
+    renderCurrentView();
+    hideChartTooltip();
+  }
 });
 
 enableDragScroll(elements.tasksWrap);

@@ -1086,3 +1086,10 @@ tbody tr:hover .copy-id-button {
 .task-search { padding: 0.45rem 0.7rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 0.85rem; min-width: 180px; }
 .task-search:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
 .task-controls .control-select select { min-width: 130px; }
+
+/* Selected-day bar + task filter affordances */
+.hours-chart .bar.bar-selected { fill: var(--brand-strong); }
+.hours-chart .bar:not(.bar-selected) { /* others stay default */ }
+.day-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-strong); font-weight: 600; font-size: 0.78rem; }
+.meta-clear { min-height: 0; padding: 2px 8px; margin-left: 4px; font-size: 0.78rem; font-weight: 600; color: var(--brand-strong); background: transparent; border: 1px solid var(--line-strong); border-radius: 999px; cursor: pointer; }
+.meta-clear:hover { background: var(--brand-soft); border-color: var(--brand-soft); }
