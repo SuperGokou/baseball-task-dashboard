@@ -1093,3 +1093,8 @@ tbody tr:hover .copy-id-button {
 .day-chip { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-strong); font-weight: 600; font-size: 0.78rem; }
 .meta-clear { min-height: 0; padding: 2px 8px; margin-left: 4px; font-size: 0.78rem; font-weight: 600; color: var(--brand-strong); background: transparent; border: 1px solid var(--line-strong); border-radius: 999px; cursor: pointer; }
 .meta-clear:hover { background: var(--brand-soft); border-color: var(--brand-soft); }
+
+/* Export CSV button */
+.export-btn { min-height: 36px; padding: 0 14px; font-size: 0.85rem; font-weight: 600; color: #fff; background: var(--brand); border: 1px solid var(--brand); border-radius: var(--radius-sm); cursor: pointer; }
+.export-btn:hover { background: var(--brand-strong); border-color: var(--brand-strong); }
+.export-btn:active { transform: translateY(1px); }

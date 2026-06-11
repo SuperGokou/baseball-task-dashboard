@@ -18,6 +18,7 @@ const elements = {
   tasksTable: document.querySelector("#tasks-table"),
   tasksWrap: document.querySelector(".tasks-wrap"),
   tasksMeta: document.querySelector("#tasks-meta"),
+  exportButton: document.querySelector("#export-csv"),
   mastheadMeta: document.querySelector("#masthead-meta"),
   generatedAt: document.querySelector("#generated-at"),
   message: document.querySelector("#message"),
@@ -311,6 +312,47 @@ function renderTasks(tasks) {
     .join("");
 }
 
+/** Serialize rows (array of arrays) to RFC-4180 CSV text. */
+function toCsv(rows) {
+  const esc = (v) => {
+    const s = String(v ?? "");
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return rows.map((r) => r.map(esc).join(",")).join("\r\n");
+}
+
+/** Export the currently-filtered task table to a CSV download. */
+function exportTasksCsv() {
+  const view = currentView();
+  const header = ["Date (PT)", "Task ID", "Project", "Stage", "Time", "Seconds", "Title", "Instance ID", "Billable"];
+  const rows = view.tasks.map((t) => {
+    const seconds = t.totalSeconds ?? t.seconds ?? 0;
+    return [
+      t.date || "",
+      t.id || "",
+      t.project || "",
+      t.billable ? "Billable" : t.stage || "",
+      formatHMS(seconds),
+      seconds,
+      t.title || "",
+      t.taskKey || "",
+      t.billable ? "yes" : "no",
+    ];
+  });
+  // Prepend a BOM so Excel reads UTF-8 correctly.
+  const csv = "﻿" + toCsv([header, ...rows]);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const stamp = dayPT(state.dashboard?.generatedAt) || "export";
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `weekly-hours-tasks-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** Click-and-drag horizontal scrolling for the (wide) tasks table. */
 function enableDragScroll(el) {
   if (!el) return;
@@ -542,6 +584,7 @@ elements.tasksMeta?.addEventListener("click", (e) => {
   }
 });
 
+elements.exportButton?.addEventListener("click", exportTasksCsv);
 enableDragScroll(elements.tasksWrap);
 setConnected(false);
 refreshStatus();
