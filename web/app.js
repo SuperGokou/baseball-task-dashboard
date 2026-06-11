@@ -262,11 +262,11 @@ function renderTasks(tasks) {
         : `<span class="pill pill-gray">—</span>`;
       return `<tr>` +
         `<td class="nowrap">${formatDay(t.date)}</td>` +
-        `<td><div class="task-cell"><span class="task-title">${title}</span>${key}</div></td>` +
         `<td class="task-id">${escapeHtml(t.id)}</td>` +
         `<td class="nowrap">${escapeHtml(t.project || "")}</td>` +
         `<td>${stage}</td>` +
         `<td class="num">${formatHMS(t.totalSeconds ?? t.seconds)}</td>` +
+        `<td><div class="task-cell"><span class="task-title">${title}</span>${key}</div></td>` +
         `</tr>`;
     })
     .join("");
