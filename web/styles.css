@@ -1064,3 +1064,18 @@ tbody tr:hover .copy-id-button {
 .pill-blue { background: var(--blue-soft); color: var(--blue); }
 .pill-amber { background: var(--amber-soft); color: var(--amber); }
 .pill-gray { background: #eef1f5; color: var(--muted); }
+
+/* Clickable chart bars + tooltip card */
+.chart-panel { position: relative; }
+.hours-chart .bar { cursor: pointer; }
+.chart-tooltip { position: absolute; transform: translate(-50%, calc(-100% - 10px)); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow); padding: 9px 12px; min-width: 120px; pointer-events: none; z-index: 6; }
+.chart-tooltip .tt-date { font-weight: 700; font-size: 0.85rem; margin-bottom: 4px; color: var(--ink); }
+.chart-tooltip .tt-row { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--ink-soft); }
+.chart-tooltip .tt-dot { width: 9px; height: 9px; border-radius: 3px; background: var(--brand); display: inline-block; }
+.chart-tooltip .tt-sub { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+
+/* Task panel filter controls */
+.task-controls { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.task-search { padding: 0.45rem 0.7rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--panel); color: var(--ink); font-size: 0.85rem; min-width: 180px; }
+.task-search:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.task-controls .control-select select { min-width: 130px; }

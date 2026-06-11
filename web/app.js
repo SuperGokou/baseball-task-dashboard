@@ -7,6 +7,10 @@ const elements = {
   loadingState: document.querySelector("#loading-state"),
   dashboard: document.querySelector("#dashboard"),
   projectFilter: document.querySelector("#project-filter"),
+  rangeFilter: document.querySelector("#range-filter"),
+  stageFilter: document.querySelector("#stage-filter"),
+  taskSearch: document.querySelector("#task-search"),
+  chartTooltip: document.querySelector("#chart-tooltip"),
   hoursChart: document.querySelector("#hours-chart"),
   totalHours: document.querySelector("#total-hours"),
   totalSub: document.querySelector("#total-sub"),
@@ -23,7 +27,15 @@ const elements = {
 
 const ALL_PROJECTS = "__all__";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const state = { connected: false, dashboard: null, loginPollTimer: null, selectedProjectId: ALL_PROJECTS };
+const state = {
+  connected: false,
+  dashboard: null,
+  loginPollTimer: null,
+  selectedProjectId: ALL_PROJECTS,
+  selectedRange: "all",
+  selectedStage: "all",
+  searchText: "",
+};
 
 function showMessage(text) {
   if (!elements.message) return;
@@ -99,32 +111,64 @@ function stageClass(stage) {
   return "pill-gray";
 }
 
-/** Build the data view for the selected project (or all projects combined). */
-function currentView() {
+/** Earliest day ("YYYY-MM-DD") to include for the selected range, anchored to generatedAt. */
+function rangeCutoff() {
   const d = state.dashboard;
-  if (!d) return { days: [], tasks: [], totals: emptyTotals(), headline: "0h", sub: "" };
+  if (!d || state.selectedRange === "all") return null;
+  const anchor = new Date(d.generatedAt);
+  if (Number.isNaN(anchor.getTime())) return null;
+  if (state.selectedRange === "week") {
+    const dow = (anchor.getUTCDay() + 6) % 7; // Mon=0
+    const mon = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() - dow));
+    return mon.toISOString().slice(0, 10);
+  }
+  const span = { "7d": 7, "14d": 14, "30d": 30 }[state.selectedRange];
+  if (!span) return null;
+  const from = new Date(anchor);
+  from.setUTCDate(from.getUTCDate() - (span - 1));
+  return from.toISOString().slice(0, 10);
+}
+
+/** Days + tasks for the selected project (or all projects), before filtering. */
+function baseData() {
+  const d = state.dashboard;
   if (state.selectedProjectId === ALL_PROJECTS) {
-    const tasks = d.projects
-      .flatMap((p) => (p.tasks || []).map((t) => ({ ...t, project: p.name })))
-      .sort(sortTasks);
-    return {
-      days: d.days || [],
-      tasks,
-      totals: d.totals,
-      headline: `${d.totals.hours.toFixed(1)}h`,
-      sub: `${d.totals.taskCount} tasks · ${(d.lifetime?.totalHours ?? 0).toFixed(1)}h lifetime`,
-    };
+    const tasks = d.projects.flatMap((p) => (p.tasks || []).map((t) => ({ ...t, project: p.name })));
+    return { days: d.days || [], tasks, lifetime: d.lifetime?.totalHours ?? 0, isAll: true, kind: "" };
   }
   const p = d.projects.find((x) => x.id === state.selectedProjectId);
-  const totals = p?.totals || emptyTotals();
-  const tasks = (p?.tasks || []).map((t) => ({ ...t, project: p ? p.name : "" })).sort(sortTasks);
-  return {
-    days: p?.days || [],
-    tasks,
-    totals,
-    headline: `${totals.hours.toFixed(1)}h`,
-    sub: `${totals.taskCount} tasks${p ? " · " + p.kind : ""}`,
-  };
+  const tasks = (p?.tasks || []).map((t) => ({ ...t, project: p ? p.name : "" }));
+  return { days: p?.days || [], tasks, lifetime: null, isAll: false, kind: p?.kind || "" };
+}
+
+/** Build the filtered data view for the current project + range + stage + search. */
+function currentView() {
+  const d = state.dashboard;
+  if (!d) return { days: [], tasks: [], headline: "0h", sub: "" };
+  const base = baseData();
+  const cutoff = rangeCutoff();
+  const inRange = (iso) => !cutoff || (!!iso && iso.slice(0, 10) >= cutoff);
+
+  const days = base.days.filter((x) => inRange(x.day));
+  const search = state.searchText.trim().toLowerCase();
+  let tasks = base.tasks.filter((t) => inRange(t.date));
+  if (state.selectedStage !== "all") tasks = tasks.filter((t) => (t.stage || "") === state.selectedStage);
+  if (search) {
+    tasks = tasks.filter((t) =>
+      `${t.title || ""} ${t.taskKey || ""} ${t.id || ""}`.toLowerCase().includes(search)
+    );
+  }
+  tasks.sort(sortTasks);
+
+  const sumSeconds = days.reduce((s, x) => s + x.seconds, 0);
+  const taskWord = `${tasks.length} task${tasks.length === 1 ? "" : "s"}`;
+  const sub = base.isAll
+    ? cutoff
+      ? taskWord
+      : `${taskWord} · ${base.lifetime.toFixed(1)}h lifetime`
+    : `${taskWord}${base.kind ? " · " + base.kind : ""}`;
+
+  return { days, tasks, headline: `${(sumSeconds / 3600).toFixed(1)}h`, sub };
 }
 
 function sortTasks(a, b) {
@@ -189,7 +233,7 @@ function renderChart(days) {
       const h = d.hours > 0 ? Math.max(2, (d.hours / niceMax) * plotH) : 0;
       const y = padT + plotH - h;
       const rect = h > 0
-        ? `<rect class="bar" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${d.hours}h · ${d.taskCount} tasks</title></rect>`
+        ? `<rect class="bar" data-day="${d.day}" data-hours="${d.hours}" data-tasks="${d.taskCount}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${d.hours}h · ${d.taskCount} tasks</title></rect>`
         : "";
       const lab = i % labelEvery === 0
         ? `<text class="x-label" x="${cx.toFixed(1)}" y="${VBH - 16}" text-anchor="middle">${escapeHtml(dayLabelOf(d.day))}</text>`
@@ -251,6 +295,44 @@ function enableDragScroll(el) {
   el.addEventListener("pointerleave", end);
 }
 
+function hideChartTooltip() {
+  if (elements.chartTooltip) elements.chartTooltip.hidden = true;
+}
+
+/** Show a tooltip card above a clicked bar with the day's hours + task count. */
+function showChartTooltip(rect) {
+  const tip = elements.chartTooltip;
+  if (!tip) return;
+  const panel = elements.hoursChart.closest(".chart-panel");
+  if (!panel) return;
+  const pr = panel.getBoundingClientRect();
+  const br = rect.getBoundingClientRect();
+  const day = rect.getAttribute("data-day");
+  const hours = rect.getAttribute("data-hours");
+  const tasks = rect.getAttribute("data-tasks");
+  tip.innerHTML =
+    `<div class="tt-date">${escapeHtml(formatDay(day))}</div>` +
+    `<div class="tt-row"><span class="tt-dot"></span><strong>${escapeHtml(hours)}h</strong> worked</div>` +
+    `<div class="tt-sub">${escapeHtml(tasks)} task${tasks === "1" ? "" : "s"}</div>`;
+  tip.hidden = false;
+  const left = Math.min(Math.max(br.left + br.width / 2 - pr.left, 70), pr.width - 70);
+  const top = br.top - pr.top;
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+
+function populateStageFilter(d) {
+  if (!elements.stageFilter) return;
+  const stages = new Set();
+  for (const p of d.projects) for (const t of p.tasks || []) if (t.stage) stages.add(t.stage);
+  const sorted = [...stages].sort((a, b) => a.localeCompare(b));
+  elements.stageFilter.innerHTML =
+    `<option value="all">All stages</option>` +
+    sorted.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  if (state.selectedStage !== "all" && !stages.has(state.selectedStage)) state.selectedStage = "all";
+  elements.stageFilter.value = state.selectedStage;
+}
+
 function populateProjectFilter(d) {
   if (!elements.projectFilter) return;
   const options = [`<option value="${ALL_PROJECTS}">All projects</option>`].concat(
@@ -266,6 +348,7 @@ function populateProjectFilter(d) {
 }
 
 function renderCurrentView() {
+  hideChartTooltip();
   const view = currentView();
   elements.totalHours.textContent = view.headline;
   elements.totalSub.textContent = view.sub;
@@ -277,6 +360,7 @@ function renderCurrentView() {
 function renderDashboard(d) {
   state.dashboard = d;
   populateProjectFilter(d);
+  populateStageFilter(d);
   renderCurrentView();
   if (elements.mastheadMeta) elements.mastheadMeta.hidden = false;
   const stamp = new Date(d.generatedAt).toLocaleString();
@@ -371,6 +455,23 @@ elements.messageDismiss?.addEventListener("click", clearMessage);
 elements.projectFilter?.addEventListener("change", (e) => {
   state.selectedProjectId = e.target.value;
   renderCurrentView();
+});
+elements.rangeFilter?.addEventListener("change", (e) => {
+  state.selectedRange = e.target.value;
+  renderCurrentView();
+});
+elements.stageFilter?.addEventListener("change", (e) => {
+  state.selectedStage = e.target.value;
+  renderCurrentView();
+});
+elements.taskSearch?.addEventListener("input", (e) => {
+  state.searchText = e.target.value;
+  renderCurrentView();
+});
+elements.hoursChart?.addEventListener("click", (e) => {
+  const bar = e.target.closest(".bar");
+  if (bar) showChartTooltip(bar);
+  else hideChartTooltip();
 });
 
 enableDragScroll(elements.tasksWrap);
