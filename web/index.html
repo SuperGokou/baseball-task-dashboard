@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tasks Dashboard</title>
+    <title>Weekly Hours</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app-shell">
       <header class="masthead">
         <div class="masthead-copy">
-          <h1 id="masthead-title">Tasks Dashboard</h1>
+          <h1 id="masthead-title">Weekly Hours</h1>
           <p class="subtitle" id="masthead-subtitle">Open the login window and finish signing in. Your session is saved automatically — your tasks load on their own.</p>
         </div>
         <div class="masthead-side">
@@ -60,69 +60,33 @@
       <section class="dashboard" id="dashboard" hidden>
         <div class="summary-grid" id="summary-grid"></div>
 
-        <article class="panel activity-panel" id="activity-panel">
-          <div class="activity-heading">
-            <h2>Latest activity</h2>
-            <span id="activity-meta" class="activity-meta"></span>
+        <article class="panel chart-panel">
+          <div class="panel-heading">
+            <h2>Hours per week</h2>
+            <span id="chart-meta" class="panel-meta"></span>
           </div>
-          <ul id="activity-list" class="activity-list"></ul>
+          <div id="weekly-chart" class="weekly-chart"></div>
         </article>
 
         <article class="panel">
-            <div class="filter-bar">
-              <span id="result-count" class="result-count">0 tasks</span>
-              <input
-                id="search-input"
-                class="filter-input filter-search"
-                type="search"
-                placeholder="Search task ID, stage, title…"
-              />
-              <select id="stage-filter" class="filter-input"></select>
-              <select id="build-filter" class="filter-input"></select>
-              <input
-                id="date-from-input"
-                class="filter-input filter-date"
-                type="date"
-                aria-label="Updated from"
-                title="Updated from"
-              />
-              <input
-                id="date-to-input"
-                class="filter-input filter-date"
-                type="date"
-                aria-label="Updated to"
-                title="Updated to"
-              />
-              <button class="chip clear-chip" id="clear-filters-button" hidden>
-                Clear filters
-              </button>
-              <button class="primary copy-primary" id="copy-visible-button">
-                <span class="copy-icon" aria-hidden="true">⧉</span>
-                <span class="copy-label">Copy Filtered IDs</span>
-                <span class="copy-count" id="copy-count">0</span>
-              </button>
-            </div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th class="sortable" data-sort="id">Task ID<span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="stage">Stage<span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="buildStatus">Build<span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="updatedAt">Updated<span class="sort-icon"></span></th>
-                    <th class="sortable" data-sort="title">Title<span class="sort-icon"></span></th>
-                  </tr>
-                </thead>
-                <tbody id="task-table"></tbody>
-              </table>
-            </div>
+          <div class="panel-heading">
+            <h2>Weekly breakdown</h2>
+            <span id="projects-meta" class="panel-meta"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Week</th><th>Hours</th><th>Tasks</th><th>Avg / task</th></tr>
+              </thead>
+              <tbody id="weekly-table"></tbody>
+            </table>
+          </div>
         </article>
       </section>
 
       <footer class="footnote">
-        <span id="footnote-text">Tasks Dashboard</span>
-        <a href="https://github.com/Rhy-Shah/Project-H-task-dashboard" target="_blank" rel="noreferrer">GitHub</a>
+        <span id="footnote-text">Weekly Hours · Handshake dashboard</span>
+        <a href="https://github.com/SuperGokou/baseball-task-dashboard" target="_blank" rel="noreferrer">GitHub</a>
       </footer>
     </main>
 

@@ -983,3 +983,13 @@ tbody tr:hover .copy-id-button {
     justify-content: center;
   }
 }
+
+.panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.panel-meta { color: var(--muted, #64748b); font-size: 0.85rem; }
+.weekly-chart { width: 100%; overflow-x: auto; }
+.weekly-chart svg { display: block; width: 100%; height: auto; }
+.weekly-chart .bar { fill: var(--brand, #2f6f4f); transition: fill 150ms ease; }
+.weekly-chart .bar:hover { fill: var(--brand-strong, #1f5a3d); }
+.weekly-chart .bar-label { fill: var(--muted, #64748b); font-size: 11px; }
+.weekly-chart .bar-value { fill: var(--ink, #0f172a); font-size: 11px; font-weight: 600; }
+.weekly-chart .axis { stroke: var(--line, #e5e7ec); stroke-width: 1; }
