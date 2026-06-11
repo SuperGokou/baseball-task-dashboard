@@ -214,10 +214,77 @@ function summarizeTasks(tasks, profileId) {
   return rows;
 }
 
+/**
+ * Merge the platform's current-week billable pay activities into the claimed-task
+ * daily series. Pay activities (listCurrentWeekPayActivities) are the platform's
+ * source of truth for the current week and include billable work (e.g. reviews)
+ * on tasks that are NOT in the fellow's claimed-task list. For the days the pay
+ * activities cover, their totals replace the claimed-task totals; tasks not in the
+ * claimed list are returned as supplemental rows.
+ *
+ * @param {Array<object>} days claimed-task daily buckets (full history)
+ * @param {Array<string>} claimedTaskIds task ids already present from claimed tasks
+ * @param {Array<{taskId,payableHours,createdAt}>} payRecords current-week pay activities
+ * @returns {{ days: Array<object>, payTasks: Array<object> }}
+ */
+function mergeCurrentWeekPayActivities(days, claimedTaskIds, payRecords) {
+  const payByDay = new Map(); // day -> { seconds, taskIds:Set }
+  const payTask = new Map(); // taskId -> { seconds, date }
+  for (const r of Array.isArray(payRecords) ? payRecords : []) {
+    const seconds = Math.round((r?.payableHours || 0) * 3600);
+    const day = dayUtc(r?.createdAt);
+    if (seconds <= 0 || !day) continue;
+    let bucket = payByDay.get(day);
+    if (!bucket) {
+      bucket = { seconds: 0, taskIds: new Set() };
+      payByDay.set(day, bucket);
+    }
+    bucket.seconds += seconds;
+    if (r.taskId) bucket.taskIds.add(r.taskId);
+    const t = payTask.get(r.taskId) || { seconds: 0, date: null };
+    t.seconds += seconds;
+    if (!t.date || r.createdAt > t.date) t.date = r.createdAt;
+    if (r.taskId) payTask.set(r.taskId, t);
+  }
+
+  const payDays = new Set(payByDay.keys());
+  const mergedDays = (Array.isArray(days) ? days : []).filter((d) => !payDays.has(d.day));
+  for (const [day, bucket] of payByDay) {
+    mergedDays.push({
+      day,
+      dayLabel: dayLabel(day),
+      seconds: bucket.seconds,
+      hours: round2(bucket.seconds / 3600),
+      taskCount: bucket.taskIds.size,
+    });
+  }
+  mergedDays.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+
+  const claimed = new Set(claimedTaskIds || []);
+  const payTasks = [];
+  for (const [taskId, t] of payTask) {
+    if (claimed.has(taskId)) continue;
+    payTasks.push({
+      id: taskId,
+      title: "Billable activity",
+      taskKey: "",
+      stage: "",
+      seconds: t.seconds,
+      totalSeconds: t.seconds,
+      hours: round2(t.seconds / 3600),
+      date: t.date,
+    });
+  }
+  payTasks.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  return { days: mergedDays, payTasks };
+}
+
 module.exports = {
   weekStartUtc,
   aggregateWeeklyHours,
   dayUtc,
   aggregateDailyHours,
   summarizeTasks,
+  mergeCurrentWeekPayActivities,
 };

@@ -2,6 +2,7 @@ const {
   aggregateWeeklyHours,
   aggregateDailyHours,
   summarizeTasks,
+  mergeCurrentWeekPayActivities,
 } = require("./time-tracking");
 
 const HANDSHAKE_ORIGIN = "https://ai.joinhandshake.com";
@@ -563,6 +564,17 @@ function fetchAllTasksForProject(projectId, storageState, options = {}) {
   return fetchAllTasks(projectId, storageState, options);
 }
 
+async function fetchCurrentWeekPayActivities(storageState, profileId, options = {}) {
+  const trpc = options.fetchTrpc || fetchTrpc;
+  const data = await trpc(
+    "fellow.listCurrentWeekPayActivities",
+    { fellowId: profileId },
+    storageState,
+    options
+  );
+  return Array.isArray(data) ? data : [];
+}
+
 async function fetchWeeklyHoursDashboard(storageState, options = {}) {
   const _fetchProfile = options.fetchProfile || fetchProfile;
   const _listProjects = options.listProjects || listProjects;
@@ -600,7 +612,21 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
   }
 
   const { weeks, totals } = aggregateWeeklyHours(allTasks, profileId);
-  const { days } = aggregateDailyHours(allTasks, profileId);
+  let { days } = aggregateDailyHours(allTasks, profileId);
+
+  // Reconcile the current week against the platform's billable pay activities,
+  // which include work (e.g. reviews) on tasks not in the claimed-task list.
+  let payTasks = [];
+  const _fetchPay = options.fetchPayActivities || fetchCurrentWeekPayActivities;
+  try {
+    const pay = await _fetchPay(storageState, profileId, options);
+    const merged = mergeCurrentWeekPayActivities(days, allTasks.map((t) => t.id), pay);
+    days = merged.days;
+    payTasks = merged.payTasks;
+  } catch (err) {
+    warnings.push(`Could not load current-week billable activities: ${err.message}`);
+  }
+
   let lifetime = { totalHours: 0, totalSeconds: 0 };
   try {
     lifetime = await _getHoursWorked(storageState, profileId, options);
@@ -616,6 +642,7 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
     days,
     totals,
     projects: projectSummaries,
+    payTasks,
     warnings,
   };
 }

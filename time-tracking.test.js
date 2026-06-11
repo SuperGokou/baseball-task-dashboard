@@ -149,3 +149,28 @@ test("summarizeTasks exposes platform totalTimeSpentInSeconds, falling back to m
   assert.equal(byId.a.totalSeconds, 327); // platform value, not my 900
   assert.equal(byId.b.totalSeconds, 1800); // fallback to my time when platform value absent
 });
+
+const { mergeCurrentWeekPayActivities } = require("./time-tracking");
+
+test("mergeCurrentWeekPayActivities overrides current-week days and supplements missing tasks", () => {
+  const days = [
+    { day: "2026-06-01", dayLabel: "Jun 1", seconds: 3600, hours: 1, taskCount: 1 },
+    { day: "2026-06-08", dayLabel: "Jun 8", seconds: 7200, hours: 2, taskCount: 2 }, // will be overridden
+  ];
+  const claimedIds = ["claimed1"]; // one task already known
+  const pay = [
+    { taskId: "claimed1", payableHours: 0.5, createdAt: "2026-06-08T09:00:00Z" }, // 1800s
+    { taskId: "missing1", payableHours: 0.25, createdAt: "2026-06-08T10:00:00Z" }, // 900s
+    { taskId: "missing1", payableHours: 0.25, createdAt: "2026-06-08T11:00:00Z" }, // +900s same task
+  ];
+  const { days: merged, payTasks } = mergeCurrentWeekPayActivities(days, claimedIds, pay);
+  // Jun 1 untouched; Jun 8 replaced by pay sum (1800 + 900 + 900 = 3600), 2 distinct tasks
+  const jun8 = merged.find((d) => d.day === "2026-06-08");
+  assert.equal(jun8.seconds, 3600);
+  assert.equal(jun8.taskCount, 2);
+  assert.equal(merged.find((d) => d.day === "2026-06-01").seconds, 3600);
+  // only the task NOT in claimed list is supplemented, with its summed pay seconds
+  assert.equal(payTasks.length, 1);
+  assert.equal(payTasks[0].id, "missing1");
+  assert.equal(payTasks[0].totalSeconds, 1800);
+});

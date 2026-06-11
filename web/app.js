@@ -90,6 +90,14 @@ function formatDuration(seconds) {
   return rem ? `${h}h ${rem}m` : `${h}h`;
 }
 
+/** "13:53" — hours:minutes, how the platform shows aggregate hours. */
+function formatHM(seconds) {
+  const mins = Math.round((seconds || 0) / 60);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h}:${String(m).padStart(2, "0")}`;
+}
+
 /** "00:05:27" — matches how the platform shows per-task time. */
 function formatHMS(seconds) {
   const total = Math.round(seconds || 0);
@@ -133,7 +141,9 @@ function rangeCutoff() {
 function baseData() {
   const d = state.dashboard;
   if (state.selectedProjectId === ALL_PROJECTS) {
-    const tasks = d.projects.flatMap((p) => (p.tasks || []).map((t) => ({ ...t, project: p.name })));
+    const tasks = d.projects
+      .flatMap((p) => (p.tasks || []).map((t) => ({ ...t, project: p.name })))
+      .concat((d.payTasks || []).map((t) => ({ ...t, project: "" })));
     return { days: d.days || [], tasks, lifetime: d.lifetime?.totalHours ?? 0, isAll: true, kind: "" };
   }
   const p = d.projects.find((x) => x.id === state.selectedProjectId);
@@ -165,10 +175,10 @@ function currentView() {
   const sub = base.isAll
     ? cutoff
       ? taskWord
-      : `${taskWord} · ${base.lifetime.toFixed(1)}h lifetime`
+      : `${taskWord} · ${formatHM((base.lifetime || 0) * 3600)} lifetime`
     : `${taskWord}${base.kind ? " · " + base.kind : ""}`;
 
-  return { days, tasks, headline: `${(sumSeconds / 3600).toFixed(1)}h`, sub };
+  return { days, tasks, headline: formatHM(sumSeconds), sub };
 }
 
 function sortTasks(a, b) {
@@ -233,7 +243,7 @@ function renderChart(days) {
       const h = d.hours > 0 ? Math.max(2, (d.hours / niceMax) * plotH) : 0;
       const y = padT + plotH - h;
       const rect = h > 0
-        ? `<rect class="bar" data-day="${d.day}" data-hours="${d.hours}" data-tasks="${d.taskCount}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${d.hours}h · ${d.taskCount} tasks</title></rect>`
+        ? `<rect class="bar" data-day="${d.day}" data-hours="${d.hours}" data-tasks="${d.taskCount}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${formatHM(d.hours * 3600)} · ${d.taskCount} tasks</title></rect>`
         : "";
       const lab = i % labelEvery === 0
         ? `<text class="x-label" x="${cx.toFixed(1)}" y="${VBH - 16}" text-anchor="middle">${escapeHtml(dayLabelOf(d.day))}</text>`
@@ -312,7 +322,7 @@ function showChartTooltip(rect) {
   const tasks = rect.getAttribute("data-tasks");
   tip.innerHTML =
     `<div class="tt-date">${escapeHtml(formatDay(day))}</div>` +
-    `<div class="tt-row"><span class="tt-dot"></span><strong>${escapeHtml(hours)}h</strong> worked</div>` +
+    `<div class="tt-row"><span class="tt-dot"></span><strong>${formatHM(parseFloat(hours) * 3600)}</strong> worked</div>` +
     `<div class="tt-sub">${escapeHtml(tasks)} task${tasks === "1" ? "" : "s"}</div>`;
   tip.hidden = false;
   const left = Math.min(Math.max(br.left + br.width / 2 - pr.left, 70), pr.width - 70);

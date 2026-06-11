@@ -490,6 +490,7 @@ test("fetchWeeklyHoursDashboard aggregates tasks across all projects", async () 
         { profileId: "me", timeWorkedInSeconds: 1800, createdAt: "2026-05-19T09:00:00Z" }] }];
     },
     getHoursWorked: async () => ({ totalSeconds: 5400, totalHours: 1.5 }),
+    fetchPayActivities: async () => [],
     now: () => "2026-06-10T00:00:00.000Z",
   };
   const result = await fetchWeeklyHoursDashboard(STORAGE, deps);
@@ -522,6 +523,7 @@ test("fetchWeeklyHoursDashboard records a warning when one project fails", async
         { profileId: "me", timeWorkedInSeconds: 3600, createdAt: "2026-05-18T09:00:00Z" }] }];
     },
     getHoursWorked: async () => ({ totalSeconds: 3600, totalHours: 1 }),
+    fetchPayActivities: async () => [],
     now: () => "2026-06-10T00:00:00.000Z",
   };
   const result = await fetchWeeklyHoursDashboard(STORAGE, deps);
