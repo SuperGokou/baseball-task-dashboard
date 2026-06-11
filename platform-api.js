@@ -579,13 +579,17 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
     try {
       const tasks = await _fetchTasks(project.id, storageState, options);
       allTasks.push(...tasks);
-      const myTaskCount = tasks.filter((t) =>
-        (t.annotationProjectActivities || []).some((a) => a.profileId === profileId)
-      ).length;
-      projectSummaries.push({ ...project, taskCount: myTaskCount });
+      const agg = aggregateWeeklyHours(tasks, profileId);
+      projectSummaries.push({
+        ...project,
+        taskCount: agg.totals.taskCount,
+        weeks: agg.weeks,
+        totals: agg.totals,
+      });
     } catch (err) {
       warnings.push(`Could not load tasks for ${project.name}: ${err.message}`);
-      projectSummaries.push({ ...project, taskCount: 0 });
+      const empty = { seconds: 0, hours: 0, taskCount: 0, weekCount: 0 };
+      projectSummaries.push({ ...project, taskCount: 0, weeks: [], totals: empty });
     }
   }
 

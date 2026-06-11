@@ -9,6 +9,7 @@ const elements = {
   summaryGrid: document.querySelector("#summary-grid"),
   weeklyChart: document.querySelector("#weekly-chart"),
   weeklyTable: document.querySelector("#weekly-table"),
+  projectFilter: document.querySelector("#project-filter"),
   chartMeta: document.querySelector("#chart-meta"),
   projectsMeta: document.querySelector("#projects-meta"),
   mastheadMeta: document.querySelector("#masthead-meta"),
@@ -18,7 +19,8 @@ const elements = {
   messageDismiss: document.querySelector("#message-dismiss"),
 };
 
-const state = { connected: false, dashboard: null, loginPollTimer: null };
+const ALL_PROJECTS = "__all__";
+const state = { connected: false, dashboard: null, loginPollTimer: null, selectedProjectId: ALL_PROJECTS };
 
 function showMessage(text) {
   if (!elements.message) return;
@@ -49,17 +51,68 @@ function escapeHtml(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function renderSummary(d) {
-  const thisWeek = d.weeks.length ? d.weeks[d.weeks.length - 1] : { hours: 0, taskCount: 0 };
+function emptyTotals() {
+  return { seconds: 0, hours: 0, taskCount: 0, weekCount: 0 };
+}
+
+/** Build the data view for the currently selected project (or all projects). */
+function currentView() {
+  const d = state.dashboard;
+  if (!d) return { weeks: [], totals: emptyTotals(), headlineValue: "0.0", headlineLabel: "Lifetime hours", scopeLabel: "0 projects" };
+  if (state.selectedProjectId === ALL_PROJECTS) {
+    return {
+      weeks: d.weeks,
+      totals: d.totals,
+      headlineValue: (d.lifetime?.totalHours ?? 0).toFixed(1),
+      headlineLabel: "Lifetime hours",
+      scopeLabel: `${d.projects.length} project${d.projects.length === 1 ? "" : "s"}`,
+    };
+  }
+  const p = d.projects.find((x) => x.id === state.selectedProjectId);
+  const totals = p?.totals || emptyTotals();
+  return {
+    weeks: p?.weeks || [],
+    totals,
+    headlineValue: totals.hours.toFixed(1),
+    headlineLabel: `${p ? p.name : "Project"} hours`,
+    scopeLabel: p ? p.kind + " project" : "",
+  };
+}
+
+function renderSummary(view) {
+  const thisWeek = view.weeks.length ? view.weeks[view.weeks.length - 1] : { hours: 0, taskCount: 0 };
   const cards = [
-    { label: "Lifetime hours", value: (d.lifetime?.totalHours ?? 0).toFixed(1) },
+    { label: view.headlineLabel, value: view.headlineValue },
     { label: "This week", value: thisWeek.hours.toFixed(1) + "h" },
-    { label: "Tasks (total)", value: d.totals.taskCount },
+    { label: "Tasks (total)", value: view.totals.taskCount },
     { label: "Tasks this week", value: thisWeek.taskCount },
   ];
   elements.summaryGrid.innerHTML = cards
     .map((c) => `<div class="summary-card"><span class="summary-value">${escapeHtml(c.value)}</span><span class="summary-label">${escapeHtml(c.label)}</span></div>`)
     .join("");
+}
+
+function populateProjectFilter(d) {
+  if (!elements.projectFilter) return;
+  const options = [`<option value="${ALL_PROJECTS}">All projects</option>`].concat(
+    d.projects.map((p) =>
+      `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} (${(p.totals?.hours ?? 0).toFixed(1)}h)</option>`
+    )
+  );
+  elements.projectFilter.innerHTML = options.join("");
+  if (!d.projects.some((p) => p.id === state.selectedProjectId)) {
+    state.selectedProjectId = ALL_PROJECTS;
+  }
+  elements.projectFilter.value = state.selectedProjectId;
+}
+
+function renderCurrentView() {
+  const view = currentView();
+  renderSummary(view);
+  renderChart(view.weeks);
+  renderTable(view.weeks);
+  elements.chartMeta.textContent = `${view.totals.weekCount} week${view.totals.weekCount === 1 ? "" : "s"} · ${view.totals.hours.toFixed(1)}h`;
+  elements.projectsMeta.textContent = view.scopeLabel;
 }
 
 function renderChart(weeks) {
@@ -97,11 +150,8 @@ function renderTable(weeks) {
 
 function renderDashboard(d) {
   state.dashboard = d;
-  renderSummary(d);
-  renderChart(d.weeks);
-  renderTable(d.weeks);
-  elements.chartMeta.textContent = `${d.totals.weekCount} week${d.totals.weekCount === 1 ? "" : "s"} · ${d.totals.hours.toFixed(1)}h aggregated`;
-  elements.projectsMeta.textContent = `${d.projects.length} project${d.projects.length === 1 ? "" : "s"}`;
+  populateProjectFilter(d);
+  renderCurrentView();
   if (elements.mastheadMeta) elements.mastheadMeta.hidden = false;
   if (elements.generatedAt) elements.generatedAt.textContent = new Date(d.generatedAt).toLocaleString();
   if (d.warnings && d.warnings.length) showMessage(d.warnings.join(" "));
@@ -190,6 +240,10 @@ elements.saveLoginButton?.addEventListener("click", onSaveLogin);
 elements.logoutButton?.addEventListener("click", onLogout);
 elements.refreshButton?.addEventListener("click", loadDashboard);
 elements.messageDismiss?.addEventListener("click", clearMessage);
+elements.projectFilter?.addEventListener("change", (e) => {
+  state.selectedProjectId = e.target.value;
+  renderCurrentView();
+});
 
 setConnected(false);
 refreshStatus();

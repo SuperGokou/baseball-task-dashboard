@@ -993,3 +993,8 @@ tbody tr:hover .copy-id-button {
 .weekly-chart .bar-label { fill: var(--muted, #64748b); font-size: 11px; }
 .weekly-chart .bar-value { fill: var(--ink, #0f172a); font-size: 11px; font-weight: 600; }
 .weekly-chart .axis { stroke: var(--line, #e5e7ec); stroke-width: 1; }
+
+.project-bar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.25rem; }
+.project-bar label { color: var(--muted, #64748b); font-size: 0.85rem; font-weight: 600; }
+.project-bar .filter-input { min-width: 220px; padding: 0.45rem 0.7rem; border: 1px solid var(--line-strong, #d4d8e0); border-radius: var(--radius-sm, 8px); background: var(--panel, #fff); color: var(--ink, #0f172a); font-size: 0.9rem; }
+.project-bar .filter-input:focus { outline: 2px solid var(--brand, #2f6f4f); outline-offset: 1px; }

@@ -500,6 +500,11 @@ test("fetchWeeklyHoursDashboard aggregates tasks across all projects", async () 
   assert.deepEqual(result.projects.map((p) => [p.name, p.taskCount]), [
     ["Project Baseball", 1], ["Project Fade", 1],
   ]);
+  // Each project carries its own weekly breakdown for the project filter.
+  assert.equal(result.projects[0].weeks[0].weekStart, "2026-05-18");
+  assert.equal(result.projects[0].totals.hours, 1);
+  assert.equal(result.projects[1].weeks[0].weekStart, "2026-05-18");
+  assert.equal(result.projects[1].totals.hours, 0.5);
   assert.deepEqual(result.warnings, []);
   assert.equal(result.generatedAt, "2026-06-10T00:00:00.000Z");
 });
