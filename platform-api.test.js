@@ -411,3 +411,39 @@ test("normalizeTask uses pr_title when task_title is missing", () => {
 
   assert.equal(task.title, "Fix login bug");
 });
+
+const { listProjects, getHoursWorked } = require("./platform-api");
+
+test("listProjects merges active + past projects with a kind tag", async () => {
+  const calls = [];
+  const fakeTrpc = async (procedure, input) => {
+    calls.push(procedure);
+    if (procedure === "annotationProject.listByProfileId") {
+      return { annotationProjects: [{ id: "p1", name: "Project Baseball" }] };
+    }
+    if (procedure === "annotationProject.listPastProjectsByProfileId") {
+      return { projects: [{ id: "p2", name: "Project Spectra" }] };
+    }
+    throw new Error("unexpected " + procedure);
+  };
+  const projects = await listProjects(STORAGE, "prof-1", { fetchTrpc: fakeTrpc });
+  assert.deepEqual(projects, [
+    { id: "p1", name: "Project Baseball", kind: "active" },
+    { id: "p2", name: "Project Spectra", kind: "past" },
+  ]);
+  assert.deepEqual(calls.sort(), [
+    "annotationProject.listByProfileId",
+    "annotationProject.listPastProjectsByProfileId",
+  ]);
+});
+
+test("listProjects dedupes by id, preferring active", async () => {
+  const fakeTrpc = async (procedure) => {
+    if (procedure === "annotationProject.listByProfileId") {
+      return { annotationProjects: [{ id: "dup", name: "Active Name" }] };
+    }
+    return { projects: [{ id: "dup", name: "Past Name" }] };
+  };
+  const projects = await listProjects(STORAGE, "prof-1", { fetchTrpc: fakeTrpc });
+  assert.deepEqual(projects, [{ id: "dup", name: "Active Name", kind: "active" }]);
+});

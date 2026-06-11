@@ -543,6 +543,32 @@ async function fetchDashboardForProject(projectInput, storageState, options = {}
   };
 }
 
+function normalizeProjectList(data, kind) {
+  const list = data?.annotationProjects || data?.projects || [];
+  return (Array.isArray(list) ? list : [])
+    .filter((p) => p && p.id)
+    .map((p) => ({ id: p.id, name: p.name || "Untitled project", kind }));
+}
+
+async function listProjects(storageState, profileId, options = {}) {
+  const trpc = options.fetchTrpc || fetchTrpc;
+  const [active, past] = await Promise.all([
+    trpc("annotationProject.listByProfileId", { profileId }, storageState, options),
+    trpc("annotationProject.listPastProjectsByProfileId", { profileId }, storageState, options),
+  ]);
+  const seen = new Set();
+  const merged = [];
+  for (const project of [
+    ...normalizeProjectList(active, "active"),
+    ...normalizeProjectList(past, "past"),
+  ]) {
+    if (seen.has(project.id)) continue;
+    seen.add(project.id);
+    merged.push(project);
+  }
+  return merged;
+}
+
 module.exports = {
   PAGE_SIZE,
   buildTrpcUrl,
@@ -551,6 +577,7 @@ module.exports = {
   extractTasks,
   fetchAllTasks,
   fetchDashboardForProject,
+  listProjects,
   fetchPastProjectTaskHistory,
   fetchProfile,
   isPastProjectUrl,
