@@ -12,6 +12,7 @@ const elements = {
   totalSub: document.querySelector("#total-sub"),
   legendUpdated: document.querySelector("#legend-updated"),
   tasksTable: document.querySelector("#tasks-table"),
+  tasksWrap: document.querySelector(".tasks-wrap"),
   tasksMeta: document.querySelector("#tasks-meta"),
   mastheadMeta: document.querySelector("#masthead-meta"),
   generatedAt: document.querySelector("#generated-at"),
@@ -75,6 +76,16 @@ function formatDuration(seconds) {
   const h = Math.floor(mins / 60);
   const rem = mins % 60;
   return rem ? `${h}h ${rem}m` : `${h}h`;
+}
+
+/** "00:05:27" — matches how the platform shows per-task time. */
+function formatHMS(seconds) {
+  const total = Math.round(seconds || 0);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
 /** Color category for a pipeline stage pill. */
@@ -195,7 +206,7 @@ function renderChart(days) {
 
 function renderTasks(tasks) {
   if (!tasks.length) {
-    elements.tasksTable.innerHTML = `<tr><td colspan="5" class="empty-cell">No tasks worked in this view.</td></tr>`;
+    elements.tasksTable.innerHTML = `<tr><td colspan="6" class="empty-cell">No tasks worked in this view.</td></tr>`;
     return;
   }
   elements.tasksTable.innerHTML = tasks
@@ -208,12 +219,36 @@ function renderTasks(tasks) {
       return `<tr>` +
         `<td class="nowrap">${formatDay(t.date)}</td>` +
         `<td><div class="task-cell"><span class="task-title">${title}</span>${key}</div></td>` +
-        `<td>${escapeHtml(t.project || "")}</td>` +
+        `<td class="task-id">${escapeHtml(t.id)}</td>` +
+        `<td class="nowrap">${escapeHtml(t.project || "")}</td>` +
         `<td>${stage}</td>` +
-        `<td class="num">${formatDuration(t.seconds)}</td>` +
+        `<td class="num">${formatHMS(t.totalSeconds ?? t.seconds)}</td>` +
         `</tr>`;
     })
     .join("");
+}
+
+/** Click-and-drag horizontal scrolling for the (wide) tasks table. */
+function enableDragScroll(el) {
+  if (!el) return;
+  let down = false, startX = 0, startLeft = 0;
+  el.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("a")) return;
+    down = true;
+    startX = e.clientX;
+    startLeft = el.scrollLeft;
+    el.classList.add("dragging");
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!down) return;
+    el.scrollLeft = startLeft - (e.clientX - startX);
+  });
+  const end = () => {
+    down = false;
+    el.classList.remove("dragging");
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointerleave", end);
 }
 
 function populateProjectFilter(d) {
@@ -338,5 +373,6 @@ elements.projectFilter?.addEventListener("change", (e) => {
   renderCurrentView();
 });
 
+enableDragScroll(elements.tasksWrap);
 setConnected(false);
 refreshStatus();

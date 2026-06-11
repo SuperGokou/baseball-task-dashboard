@@ -1044,11 +1044,14 @@ tbody tr:hover .copy-id-button {
 .legend-note { color: var(--muted); font-size: 0.8rem; }
 
 /* Tasks table */
-.tasks-wrap { max-height: 560px; overflow-y: auto; }
-.tasks-wrap thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
-.tasks-wrap th.num, .tasks-wrap td.num { text-align: right; white-space: nowrap; min-width: 72px; }
+.tasks-wrap { max-height: 560px; overflow: auto; cursor: grab; }
+.tasks-wrap.dragging { cursor: grabbing; user-select: none; }
+.tasks-wrap table { min-width: 1040px; }
+.tasks-wrap thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; white-space: nowrap; }
+.tasks-wrap th.num, .tasks-wrap td.num { text-align: right; white-space: nowrap; min-width: 92px; }
 .tasks-wrap td.num { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
 .tasks-wrap td.nowrap { white-space: nowrap; color: var(--ink-soft); }
+.tasks-wrap td.task-id { white-space: nowrap; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 0.8rem; }
 .task-cell { display: flex; flex-direction: column; gap: 1px; }
 .task-title { font-weight: 600; color: var(--ink); }
 .task-key { color: var(--muted); font-size: 0.78rem; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }

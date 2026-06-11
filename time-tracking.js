@@ -190,6 +190,9 @@ function summarizeTasks(tasks, profileId) {
     if (!acts.length) continue;
     const seconds = acts.reduce((sum, a) => sum + a.timeWorkedInSeconds, 0);
     const days = acts.map((a) => a.createdAt).filter(Boolean).sort();
+    const totalSeconds = Number.isFinite(task?.totalTimeSpentInSeconds)
+      ? task.totalTimeSpentInSeconds
+      : seconds;
     rows.push({
       id: task.id,
       title: taskTitle(task),
@@ -197,6 +200,7 @@ function summarizeTasks(tasks, profileId) {
       stage:
         task?.$related?.pipelineStage?.name || task?.pipelineStage?.name || "",
       seconds,
+      totalSeconds,
       hours: round2(seconds / 3600),
       date: days.length ? days[days.length - 1] : null,
     });

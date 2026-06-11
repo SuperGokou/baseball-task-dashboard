@@ -136,3 +136,16 @@ test("summarizeTasks derives title from problem_statement/instance_id for SWE-be
   assert.equal(rows[0].title, "BUG: KeyError for TimeGrouper");
   assert.equal(rows[0].taskKey, "swebench-modin__modin-6174");
 });
+
+test("summarizeTasks exposes platform totalTimeSpentInSeconds, falling back to my time", () => {
+  const tasks = [
+    { id: "a", totalTimeSpentInSeconds: 327, annotationProjectActivities: [
+      { profileId: ME, timeWorkedInSeconds: 900, createdAt: "2026-06-09T09:00:00Z" }] },
+    { id: "b", annotationProjectActivities: [
+      { profileId: ME, timeWorkedInSeconds: 1800, createdAt: "2026-06-08T09:00:00Z" }] },
+  ];
+  const rows = summarizeTasks(tasks, ME);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId.a.totalSeconds, 327); // platform value, not my 900
+  assert.equal(byId.b.totalSeconds, 1800); // fallback to my time when platform value absent
+});
