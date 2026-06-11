@@ -453,7 +453,7 @@ const { fetchAllTasksForProject } = require("./platform-api");
 test("getHoursWorked returns seconds + hours from the platform", async () => {
   const fakeTrpc = async (procedure, input) => {
     assert.equal(procedure, "fellow.getHoursWorked");
-    assert.deepEqual(input, { profileId: "prof-1" });
+    assert.deepEqual(input, { fellowId: "prof-1" });
     return { totalTimeWorkedInSeconds: 466780, totalHours: 129.7 };
   };
   const result = await getHoursWorked(STORAGE, "prof-1", { fetchTrpc: fakeTrpc });

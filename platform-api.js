@@ -547,7 +547,7 @@ async function fetchDashboardForProject(projectInput, storageState, options = {}
 
 async function getHoursWorked(storageState, profileId, options = {}) {
   const trpc = options.fetchTrpc || fetchTrpc;
-  const data = await trpc("fellow.getHoursWorked", { profileId }, storageState, options);
+  const data = await trpc("fellow.getHoursWorked", { fellowId: profileId }, storageState, options);
   return {
     totalSeconds: data?.totalTimeWorkedInSeconds ?? 0,
     totalHours: data?.totalHours ?? 0,
