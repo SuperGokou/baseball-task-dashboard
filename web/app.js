@@ -181,15 +181,25 @@ function currentView() {
 
   const days = base.days.filter((x) => inRange(x.day));
   const search = state.searchText.trim().toLowerCase();
-  let tasks = base.tasks.filter((t) => inRange(t.date));
-  if (state.selectedDay) tasks = tasks.filter((t) => (t.date || "").slice(0, 10) === state.selectedDay);
-  if (state.selectedStage !== "all") tasks = tasks.filter((t) => (t.stage || "") === state.selectedStage);
-  if (search) {
-    tasks = tasks.filter((t) =>
-      `${t.title || ""} ${t.taskKey || ""} ${t.id || ""}`.toLowerCase().includes(search)
-    );
+
+  // Tasks scoped by every filter EXCEPT the clicked day. The chart's per-day
+  // task counts are derived from this same list so a bar's count always equals
+  // the number of rows shown when that day is clicked.
+  const scopedTasks = base.tasks.filter((t) => {
+    if (!inRange(t.date)) return false;
+    if (state.selectedStage !== "all" && (t.stage || "") !== state.selectedStage) return false;
+    if (search && !`${t.title || ""} ${t.taskKey || ""} ${t.id || ""}`.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const dayCounts = {};
+  for (const t of scopedTasks) {
+    const day = (t.date || "").slice(0, 10);
+    if (day) dayCounts[day] = (dayCounts[day] || 0) + 1;
   }
-  tasks.sort(sortTasks);
+
+  let tasks = scopedTasks;
+  if (state.selectedDay) tasks = tasks.filter((t) => (t.date || "").slice(0, 10) === state.selectedDay);
+  tasks = tasks.slice().sort(sortTasks);
 
   // Headline reflects the clicked day if one is selected, else the whole range.
   const headlineSeconds = state.selectedDay
@@ -204,7 +214,7 @@ function currentView() {
         : `${taskWord} · ${formatHM((base.lifetime || 0) * 3600)} lifetime`
       : `${taskWord}${base.kind ? " · " + base.kind : ""}`;
 
-  return { days, tasks, headline: formatHM(headlineSeconds), sub };
+  return { days, tasks, dayCounts, headline: formatHM(headlineSeconds), sub };
 }
 
 function sortTasks(a, b) {
@@ -238,7 +248,7 @@ function continuousDays(days) {
   return out;
 }
 
-function renderChart(days) {
+function renderChart(days, dayCounts = {}) {
   const series = continuousDays(days);
   if (!series.length) {
     elements.hoursChart.innerHTML = `<p class="chart-empty">No hours recorded yet.</p>`;
@@ -269,8 +279,9 @@ function renderChart(days) {
       const h = d.hours > 0 ? Math.max(2, (d.hours / niceMax) * plotH) : 0;
       const y = padT + plotH - h;
       const sel = d.day === state.selectedDay ? " bar-selected" : "";
+      const count = dayCounts[d.day] ?? d.taskCount;
       const rect = h > 0
-        ? `<rect class="bar${sel}" data-day="${d.day}" data-hours="${d.hours}" data-tasks="${d.taskCount}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${formatHM(d.hours * 3600)} · ${d.taskCount} tasks</title></rect>`
+        ? `<rect class="bar${sel}" data-day="${d.day}" data-hours="${d.hours}" data-tasks="${count}" x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${escapeHtml(dayLabelOf(d.day))}: ${formatHM(d.hours * 3600)} · ${count} tasks</title></rect>`
         : "";
       const lab = i % labelEvery === 0
         ? `<text class="x-label" x="${cx.toFixed(1)}" y="${VBH - 16}" text-anchor="middle">${escapeHtml(dayLabelOf(d.day))}</text>`
@@ -433,7 +444,7 @@ function renderCurrentView() {
   const view = currentView();
   elements.totalHours.textContent = view.headline;
   elements.totalSub.textContent = view.sub;
-  renderChart(view.days);
+  renderChart(view.days, view.dayCounts);
   renderTasks(view.tasks);
   const taskWord = `${view.tasks.length} task${view.tasks.length === 1 ? "" : "s"}`;
   elements.tasksMeta.innerHTML = state.selectedDay
