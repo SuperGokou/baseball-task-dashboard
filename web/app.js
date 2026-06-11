@@ -267,10 +267,13 @@ function renderTasks(tasks) {
     .map((t) => {
       const title = escapeHtml(t.title || t.id);
       const key = t.taskKey ? `<span class="task-key">${escapeHtml(t.taskKey)}</span>` : "";
-      const stage = t.stage
-        ? `<span class="pill ${stageClass(t.stage)}">${escapeHtml(t.stage)}</span>`
-        : `<span class="pill pill-gray">—</span>`;
-      return `<tr>` +
+      const stage = t.billable
+        ? `<span class="pill pill-red">Billable</span>`
+        : t.stage
+          ? `<span class="pill ${stageClass(t.stage)}">${escapeHtml(t.stage)}</span>`
+          : `<span class="pill pill-gray">—</span>`;
+      const rowClass = t.billable ? ' class="billable-row"' : "";
+      return `<tr${rowClass}>` +
         `<td class="nowrap">${formatDay(t.date)}</td>` +
         `<td class="task-id">${escapeHtml(t.id)}</td>` +
         `<td class="nowrap">${escapeHtml(t.project || "")}</td>` +

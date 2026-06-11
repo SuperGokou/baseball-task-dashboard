@@ -1064,6 +1064,13 @@ tbody tr:hover .copy-id-button {
 .pill-blue { background: var(--blue-soft); color: var(--blue); }
 .pill-amber { background: var(--amber-soft); color: var(--amber); }
 .pill-gray { background: #eef1f5; color: var(--muted); }
+.pill-red { background: var(--coral-soft); color: var(--coral); }
+
+/* Supplemented billable (pay-activity) rows — marked red */
+.billable-row td { background: rgba(192, 57, 43, 0.05); }
+.billable-row .task-title { color: var(--coral); font-weight: 600; }
+.billable-row td.num { color: var(--coral); }
+.billable-row td.task-id { color: var(--coral); }
 
 /* Clickable chart bars + tooltip card */
 .chart-panel { position: relative; }

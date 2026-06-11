@@ -269,6 +269,7 @@ function mergeCurrentWeekPayActivities(days, claimedTaskIds, payRecords) {
       title: "Billable activity",
       taskKey: "",
       stage: "",
+      billable: true,
       seconds: t.seconds,
       totalSeconds: t.seconds,
       hours: round2(t.seconds / 3600),
