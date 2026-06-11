@@ -522,9 +522,34 @@ select:focus {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
   margin-bottom: 18px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line, #e5e7ec);
+  border-radius: var(--radius, 12px);
+  box-shadow: var(--shadow);
+}
+
+.summary-card .summary-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink, #0f172a);
+}
+
+.summary-card .summary-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted, #64748b);
 }
 
 .activity-panel {
@@ -986,8 +1011,8 @@ tbody tr:hover .copy-id-button {
 
 .panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .panel-meta { color: var(--muted, #64748b); font-size: 0.85rem; }
-.weekly-chart { width: 100%; overflow-x: auto; }
-.weekly-chart svg { display: block; width: 100%; height: auto; }
+.weekly-chart { width: 100%; }
+.weekly-chart svg { display: block; width: 100%; height: auto; max-height: 280px; margin: 0 auto; }
 .weekly-chart .bar { fill: var(--brand, #2f6f4f); transition: fill 150ms ease; }
 .weekly-chart .bar:hover { fill: var(--brand-strong, #1f5a3d); }
 .weekly-chart .bar-label { fill: var(--muted, #64748b); font-size: 11px; }

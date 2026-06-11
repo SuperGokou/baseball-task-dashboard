@@ -120,24 +120,31 @@ function renderChart(weeks) {
     elements.weeklyChart.innerHTML = `<p class="panel-meta">No hours recorded yet.</p>`;
     return;
   }
-  const W = Math.max(weeks.length * 56 + 60, 320), H = 240, padBottom = 28, padTop = 16, padLeft = 8;
+  // Fixed, wide logical canvas so the chart keeps a stable landscape height
+  // regardless of how many weeks there are (avoids the chart ballooning tall
+  // when few bars are stretched to full width).
+  const VBW = 760, VBH = 240, padX = 28, padTop = 22, padBottom = 36;
+  const plotW = VBW - padX * 2;
+  const plotH = VBH - padTop - padBottom;
   const maxHours = Math.max(...weeks.map((w) => w.hours), 1);
-  const barW = 36, gap = 20, plotH = H - padBottom - padTop;
+  const slot = plotW / weeks.length;
+  const barW = Math.min(56, slot * 0.5);
   const bars = weeks
     .map((w, i) => {
-      const x = padLeft + i * (barW + gap) + 20;
-      const h = Math.round((w.hours / maxHours) * plotH);
+      const centerX = padX + slot * (i + 0.5);
+      const x = centerX - barW / 2;
+      const h = Math.max(2, Math.round((w.hours / maxHours) * plotH));
       const y = padTop + (plotH - h);
       return `<g><title>${escapeHtml(w.weekLabel)}: ${w.hours}h · ${w.taskCount} tasks</title>` +
-        `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4"></rect>` +
-        `<text class="bar-value" x="${x + barW / 2}" y="${y - 4}" text-anchor="middle">${w.hours}</text>` +
-        `<text class="bar-label" x="${x + barW / 2}" y="${H - 10}" text-anchor="middle">${escapeHtml(w.weekLabel)}</text></g>`;
+        `<rect class="bar" x="${x.toFixed(1)}" y="${y}" width="${barW.toFixed(1)}" height="${h}" rx="5"></rect>` +
+        `<text class="bar-value" x="${centerX.toFixed(1)}" y="${y - 6}" text-anchor="middle">${w.hours}</text>` +
+        `<text class="bar-label" x="${centerX.toFixed(1)}" y="${VBH - 12}" text-anchor="middle">${escapeHtml(w.weekLabel)}</text></g>`;
     })
     .join("");
   const axisY = padTop + plotH + 0.5;
   elements.weeklyChart.innerHTML =
-    `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Hours per week">` +
-    `<line class="axis" x1="0" y1="${axisY}" x2="${W}" y2="${axisY}"></line>${bars}</svg>`;
+    `<svg viewBox="0 0 ${VBW} ${VBH}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hours per week">` +
+    `<line class="axis" x1="${padX}" y1="${axisY}" x2="${VBW - padX}" y2="${axisY}"></line>${bars}</svg>`;
 }
 
 function renderTable(weeks) {
