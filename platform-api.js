@@ -1,4 +1,8 @@
-const { aggregateWeeklyHours } = require("./time-tracking");
+const {
+  aggregateWeeklyHours,
+  aggregateDailyHours,
+  summarizeTasks,
+} = require("./time-tracking");
 
 const HANDSHAKE_ORIGIN = "https://ai.joinhandshake.com";
 const DEFAULT_REFERER = `${HANDSHAKE_ORIGIN}/fellow/projects`;
@@ -584,16 +588,19 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
         ...project,
         taskCount: agg.totals.taskCount,
         weeks: agg.weeks,
+        days: aggregateDailyHours(tasks, profileId).days,
         totals: agg.totals,
+        tasks: summarizeTasks(tasks, profileId),
       });
     } catch (err) {
       warnings.push(`Could not load tasks for ${project.name}: ${err.message}`);
       const empty = { seconds: 0, hours: 0, taskCount: 0, weekCount: 0 };
-      projectSummaries.push({ ...project, taskCount: 0, weeks: [], totals: empty });
+      projectSummaries.push({ ...project, taskCount: 0, weeks: [], days: [], totals: empty, tasks: [] });
     }
   }
 
   const { weeks, totals } = aggregateWeeklyHours(allTasks, profileId);
+  const { days } = aggregateDailyHours(allTasks, profileId);
   let lifetime = { totalHours: 0, totalSeconds: 0 };
   try {
     lifetime = await _getHoursWorked(storageState, profileId, options);
@@ -606,6 +613,7 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
     profile: { id: profileId, name: profile.name || profile.fullName || "User" },
     lifetime,
     weeks,
+    days,
     totals,
     projects: projectSummaries,
     warnings,

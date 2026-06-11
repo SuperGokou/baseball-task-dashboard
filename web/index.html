@@ -58,32 +58,41 @@
       </section>
 
       <section class="dashboard" id="dashboard" hidden>
-        <div class="project-bar">
-          <label for="project-filter">Project</label>
-          <select id="project-filter" class="filter-input"></select>
-        </div>
-
-        <div class="summary-grid" id="summary-grid"></div>
-
         <article class="panel chart-panel">
-          <div class="panel-heading">
-            <h2>Hours per week</h2>
-            <span id="chart-meta" class="panel-meta"></span>
+          <div class="panel-top">
+            <div class="panel-top-left">
+              <h2>Hours over time</h2>
+              <div class="chart-controls">
+                <label class="control-select" for="project-filter">
+                  <span class="control-icon" aria-hidden="true">▦</span>
+                  <select id="project-filter"></select>
+                </label>
+              </div>
+            </div>
+            <div class="panel-total">
+              <span class="panel-total-label">Total hours</span>
+              <span class="panel-total-value" id="total-hours">0h</span>
+              <span class="panel-total-sub" id="total-sub"></span>
+            </div>
           </div>
-          <div id="weekly-chart" class="weekly-chart"></div>
+          <div id="hours-chart" class="hours-chart"></div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-swatch"></span> Hours worked</span>
+            <span class="legend-note" id="legend-updated"></span>
+          </div>
         </article>
 
         <article class="panel">
-          <div class="panel-heading">
-            <h2>Weekly breakdown</h2>
-            <span id="projects-meta" class="panel-meta"></span>
+          <div class="panel-top">
+            <h2>Tasks</h2>
+            <span class="panel-meta" id="tasks-meta"></span>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap tasks-wrap">
             <table>
               <thead>
-                <tr><th>Week</th><th>Hours</th><th>Tasks</th><th>Avg / task</th></tr>
+                <tr><th>Date</th><th>Task</th><th>Project</th><th>Stage</th><th class="num">Time</th></tr>
               </thead>
-              <tbody id="weekly-table"></tbody>
+              <tbody id="tasks-table"></tbody>
             </table>
           </div>
         </article>

@@ -83,3 +83,56 @@ test("aggregateWeeklyHours returns weeks ascending by weekStart", () => {
   const { weeks } = aggregateWeeklyHours(tasks, ME);
   assert.deepEqual(weeks.map((w) => w.weekStart), ["2026-05-04", "2026-05-25"]);
 });
+
+const { aggregateDailyHours, summarizeTasks, dayUtc } = require("./time-tracking");
+
+test("dayUtc returns the calendar day (UTC)", () => {
+  assert.equal(dayUtc("2026-05-20T23:30:00.000Z"), "2026-05-20");
+  assert.equal(dayUtc("bad"), null);
+});
+
+test("aggregateDailyHours buckets my time by day, ascending", () => {
+  const tasks = [
+    task("t1", [act("2026-05-18T09:00:00Z", 3600), act("2026-05-19T09:00:00Z", 1800)]),
+    task("t2", [act("2026-05-18T22:00:00Z", 1800, "someone-else"), act("2026-05-18T23:00:00Z", 900)]),
+  ];
+  const { days, totals } = aggregateDailyHours(tasks, ME);
+  assert.deepEqual(days.map((d) => d.day), ["2026-05-18", "2026-05-19"]);
+  assert.equal(days[0].seconds, 4500); // 3600 + 900 (other person excluded)
+  assert.equal(days[0].taskCount, 2);
+  assert.equal(days[1].hours, 0.5);
+  assert.equal(totals.seconds, 6300);
+  assert.equal(totals.dayCount, 2);
+});
+
+test("summarizeTasks returns one row per worked task, newest first, summing my time", () => {
+  const tasks = [
+    { id: "t1", data: { task_title: "Fix bug" }, $related: { pipelineStage: { name: "Delivered" } },
+      annotationProjectActivities: [
+        { profileId: ME, timeWorkedInSeconds: 600, createdAt: "2026-05-18T09:00:00Z" },
+        { profileId: ME, timeWorkedInSeconds: 1200, createdAt: "2026-05-19T09:00:00Z" },
+        { profileId: "other", timeWorkedInSeconds: 9999, createdAt: "2026-05-19T09:00:00Z" },
+      ] },
+    { id: "t2", data: { pr_title: "Add feature" },
+      annotationProjectActivities: [{ profileId: ME, timeWorkedInSeconds: 300, createdAt: "2026-05-25T09:00:00Z" }] },
+    { id: "t3", annotationProjectActivities: [{ profileId: "other", timeWorkedInSeconds: 500, createdAt: "2026-05-20T09:00:00Z" }] },
+  ];
+  const rows = summarizeTasks(tasks, ME);
+  assert.equal(rows.length, 2); // t3 excluded (none of my time)
+  assert.equal(rows[0].id, "t2"); // May 25 newest
+  assert.equal(rows[1].id, "t1");
+  assert.equal(rows[1].seconds, 1800); // 600 + 1200, excludes other's 9999
+  assert.equal(rows[1].title, "Fix bug");
+  assert.equal(rows[1].stage, "Delivered");
+  assert.equal(rows[1].date.slice(0, 10), "2026-05-19");
+});
+
+test("summarizeTasks derives title from problem_statement/instance_id for SWE-bench tasks", () => {
+  const tasks = [
+    { id: "x1", data: { instance_id: "swebench-modin__modin-6174", problem_statement: "BUG: KeyError for TimeGrouper\n\nmore detail here" },
+      annotationProjectActivities: [{ profileId: ME, timeWorkedInSeconds: 600, createdAt: "2026-06-09T09:00:00Z" }] },
+  ];
+  const rows = summarizeTasks(tasks, ME);
+  assert.equal(rows[0].title, "BUG: KeyError for TimeGrouper");
+  assert.equal(rows[0].taskKey, "swebench-modin__modin-6174");
+});
