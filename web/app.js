@@ -121,22 +121,39 @@ function stageClass(stage) {
   return "pill-gray";
 }
 
-/** Earliest day ("YYYY-MM-DD") to include for the selected range, anchored to generatedAt. */
+const PT_TIME_ZONE = "America/Los_Angeles";
+
+/** Calendar day in Pacific Time for a timestamp, as "YYYY-MM-DD". */
+function dayPT(value) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: PT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/** Add (or subtract) whole days to a "YYYY-MM-DD" calendar-day string. */
+function addDays(dayStr, delta) {
+  const d = new Date(dayStr + "T00:00:00Z");
+  return new Date(d.getTime() + delta * 86400000).toISOString().slice(0, 10);
+}
+
+/** Earliest PT day ("YYYY-MM-DD") to include for the selected range, anchored to generatedAt. */
 function rangeCutoff() {
   const d = state.dashboard;
   if (!d || state.selectedRange === "all") return null;
-  const anchor = new Date(d.generatedAt);
-  if (Number.isNaN(anchor.getTime())) return null;
+  const today = dayPT(d.generatedAt);
+  if (!today) return null;
   if (state.selectedRange === "week") {
-    const dow = (anchor.getUTCDay() + 6) % 7; // Mon=0
-    const mon = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate() - dow));
-    return mon.toISOString().slice(0, 10);
+    const dow = (new Date(today + "T00:00:00Z").getUTCDay() + 6) % 7; // Mon=0
+    return addDays(today, -dow);
   }
   const span = { "7d": 7, "14d": 14, "30d": 30 }[state.selectedRange];
   if (!span) return null;
-  const from = new Date(anchor);
-  from.setUTCDate(from.getUTCDate() - (span - 1));
-  return from.toISOString().slice(0, 10);
+  return addDays(today, -(span - 1));
 }
 
 /** Days + tasks for the selected project (or all projects), before filtering. */
@@ -388,7 +405,7 @@ function renderDashboard(d) {
   populateStageFilter(d);
   renderCurrentView();
   if (elements.mastheadMeta) elements.mastheadMeta.hidden = false;
-  const stamp = new Date(d.generatedAt).toLocaleString();
+  const stamp = new Date(d.generatedAt).toLocaleString(undefined, { timeZone: PT_TIME_ZONE }) + " PT";
   if (elements.generatedAt) elements.generatedAt.textContent = stamp;
   if (elements.legendUpdated) elements.legendUpdated.textContent = `Updated ${stamp}`;
   if (d.warnings && d.warnings.length) showMessage(d.warnings.join(" "));

@@ -44,7 +44,7 @@ function aggregateWeeklyHours(tasks, profileId) {
       if (activity?.profileId !== profileId) continue;
       const seconds = activity?.timeWorkedInSeconds;
       if (!Number.isFinite(seconds) || seconds <= 0) continue;
-      const week = weekStartUtc(activity.createdAt);
+      const week = weekStartPT(activity.createdAt);
       if (!week) continue;
 
       let bucket = byWeek.get(week);
@@ -90,6 +90,33 @@ function dayUtc(value) {
   return date.toISOString().slice(0, 10);
 }
 
+// All day/week bucketing is anchored to Pacific Time (the platform's timezone),
+// computed via Intl so DST (PST/PDT) is handled automatically.
+const PT_TIME_ZONE = "America/Los_Angeles";
+const PT_DAY_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: PT_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Calendar day in Pacific Time for a timestamp, as "YYYY-MM-DD". */
+function dayPT(value) {
+  if (value == null) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return PT_DAY_FORMAT.format(date);
+}
+
+/** Monday (Pacific Time) of the week containing the timestamp, as "YYYY-MM-DD". */
+function weekStartPT(value) {
+  const day = dayPT(value);
+  if (!day) return null;
+  const d = new Date(day + "T00:00:00Z");
+  const dow = (d.getUTCDay() + 6) % 7; // Mon=0 ... Sun=6
+  return new Date(d.getTime() - dow * 86400000).toISOString().slice(0, 10);
+}
+
 /** "2026-05-18" -> "May 18" (reuses weekLabel formatting). */
 function dayLabel(day) {
   return weekLabel(day);
@@ -118,7 +145,7 @@ function aggregateDailyHours(tasks, profileId) {
 
   for (const task of Array.isArray(tasks) ? tasks : []) {
     for (const activity of myActivities(task, profileId)) {
-      const day = dayUtc(activity.createdAt);
+      const day = dayPT(activity.createdAt);
       if (!day) continue;
       let bucket = byDay.get(day);
       if (!bucket) {
@@ -190,6 +217,7 @@ function summarizeTasks(tasks, profileId) {
     if (!acts.length) continue;
     const seconds = acts.reduce((sum, a) => sum + a.timeWorkedInSeconds, 0);
     const days = acts.map((a) => a.createdAt).filter(Boolean).sort();
+    const latest = days.length ? days[days.length - 1] : null;
     const totalSeconds = Number.isFinite(task?.totalTimeSpentInSeconds)
       ? task.totalTimeSpentInSeconds
       : seconds;
@@ -202,7 +230,7 @@ function summarizeTasks(tasks, profileId) {
       seconds,
       totalSeconds,
       hours: round2(seconds / 3600),
-      date: days.length ? days[days.length - 1] : null,
+      date: dayPT(latest),
     });
   }
   rows.sort((a, b) => {
@@ -232,7 +260,7 @@ function mergeCurrentWeekPayActivities(days, claimedTaskIds, payRecords) {
   const payTask = new Map(); // taskId -> { seconds, date }
   for (const r of Array.isArray(payRecords) ? payRecords : []) {
     const seconds = Math.round((r?.payableHours || 0) * 3600);
-    const day = dayUtc(r?.createdAt);
+    const day = dayPT(r?.createdAt);
     if (seconds <= 0 || !day) continue;
     let bucket = payByDay.get(day);
     if (!bucket) {
@@ -273,7 +301,7 @@ function mergeCurrentWeekPayActivities(days, claimedTaskIds, payRecords) {
       seconds: t.seconds,
       totalSeconds: t.seconds,
       hours: round2(t.seconds / 3600),
-      date: t.date,
+      date: dayPT(t.date),
     });
   }
   payTasks.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -283,8 +311,10 @@ function mergeCurrentWeekPayActivities(days, claimedTaskIds, payRecords) {
 
 module.exports = {
   weekStartUtc,
+  weekStartPT,
   aggregateWeeklyHours,
   dayUtc,
+  dayPT,
   aggregateDailyHours,
   summarizeTasks,
   mergeCurrentWeekPayActivities,

@@ -174,3 +174,14 @@ test("mergeCurrentWeekPayActivities overrides current-week days and supplements 
   assert.equal(payTasks[0].id, "missing1");
   assert.equal(payTasks[0].totalSeconds, 1800);
 });
+
+const { dayPT, weekStartPT } = require("./time-tracking");
+
+test("dayPT/weekStartPT bucket by Pacific Time (handles UTC-midnight rollover)", () => {
+  // 2026-06-09T03:00:00Z = 2026-06-08 20:00 PDT -> PT day Jun 8
+  assert.equal(dayPT("2026-06-09T03:00:00Z"), "2026-06-08");
+  assert.equal(dayPT("2026-06-09T16:00:00Z"), "2026-06-09");
+  assert.equal(dayPT("bad"), null);
+  // Jun 8 2026 is a Monday -> week start Jun 8
+  assert.equal(weekStartPT("2026-06-09T03:00:00Z"), "2026-06-08");
+});
