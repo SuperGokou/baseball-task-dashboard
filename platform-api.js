@@ -543,6 +543,20 @@ async function fetchDashboardForProject(projectInput, storageState, options = {}
   };
 }
 
+async function getHoursWorked(storageState, profileId, options = {}) {
+  const trpc = options.fetchTrpc || fetchTrpc;
+  const data = await trpc("fellow.getHoursWorked", { profileId }, storageState, options);
+  return {
+    totalSeconds: data?.totalTimeWorkedInSeconds ?? 0,
+    totalHours: data?.totalHours ?? 0,
+  };
+}
+
+function fetchAllTasksForProject(projectId, storageState, options = {}) {
+  // fetchAllTasks accepts a project id or URL via normalizeProjectInput.
+  return fetchAllTasks(projectId, storageState, options);
+}
+
 function normalizeProjectList(data, kind) {
   const list = data?.annotationProjects || data?.projects || [];
   return (Array.isArray(list) ? list : [])
@@ -576,7 +590,9 @@ module.exports = {
   extractPastHistoryTasksFromJson,
   extractTasks,
   fetchAllTasks,
+  fetchAllTasksForProject,
   fetchDashboardForProject,
+  getHoursWorked,
   listProjects,
   fetchPastProjectTaskHistory,
   fetchProfile,

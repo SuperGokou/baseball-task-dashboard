@@ -447,3 +447,27 @@ test("listProjects dedupes by id, preferring active", async () => {
   const projects = await listProjects(STORAGE, "prof-1", { fetchTrpc: fakeTrpc });
   assert.deepEqual(projects, [{ id: "dup", name: "Active Name", kind: "active" }]);
 });
+
+const { fetchAllTasksForProject } = require("./platform-api");
+
+test("getHoursWorked returns seconds + hours from the platform", async () => {
+  const fakeTrpc = async (procedure, input) => {
+    assert.equal(procedure, "fellow.getHoursWorked");
+    assert.deepEqual(input, { profileId: "prof-1" });
+    return { totalTimeWorkedInSeconds: 466780, totalHours: 129.7 };
+  };
+  const result = await getHoursWorked(STORAGE, "prof-1", { fetchTrpc: fakeTrpc });
+  assert.deepEqual(result, { totalSeconds: 466780, totalHours: 129.7 });
+});
+
+test("fetchAllTasksForProject pages raw tasks for a project id", async () => {
+  const fetchPage = mockFetchPage({
+    0: richTasksPayload([{ id: "t1", annotationProjectActivities: [] }]),
+    1: richTasksPayload([]),
+  });
+  const tasks = await fetchAllTasksForProject("26a53071-8843-4138-97df-430bd3e4cd45", STORAGE, {
+    fetchPage,
+    pageSize: 1,
+  });
+  assert.deepEqual(tasks.map((t) => t.id), ["t1"]);
+});
