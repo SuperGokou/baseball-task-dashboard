@@ -185,3 +185,33 @@ test("dayPT/weekStartPT bucket by Pacific Time (handles UTC-midnight rollover)",
   // Jun 8 2026 is a Monday -> week start Jun 8
   assert.equal(weekStartPT("2026-06-09T03:00:00Z"), "2026-06-08");
 });
+
+test("falls back to $related.projectActivities when annotationProjectActivities is empty", () => {
+  // New-style task (e.g. Lighthouse env tasks): classic field empty, activities under $related.
+  const newStyle = {
+    id: "lh1",
+    annotationProjectActivities: [],
+    $related: { projectActivities: [
+      { profileId: ME, timeWorkedInSeconds: 3600, createdAt: "2026-07-17T10:00:00Z" },
+      { profileId: "someone-else", timeWorkedInSeconds: 999, createdAt: "2026-07-17T10:00:00Z" },
+    ] },
+  };
+  // Old-style task carries the SAME rows in both places — must not double count.
+  const oldStyle = {
+    id: "old1",
+    annotationProjectActivities: [
+      { profileId: ME, timeWorkedInSeconds: 1800, createdAt: "2026-07-17T11:00:00Z" },
+    ],
+    $related: { projectActivities: [
+      { profileId: ME, timeWorkedInSeconds: 1800, createdAt: "2026-07-17T11:00:00Z" },
+    ] },
+  };
+  const { totals } = aggregateDailyHours([newStyle, oldStyle], ME);
+  assert.equal(totals.seconds, 5400); // 3600 + 1800, no double counting
+  assert.equal(totals.taskCount, 2);
+  const weekly = aggregateWeeklyHours([newStyle, oldStyle], ME);
+  assert.equal(weekly.totals.seconds, 5400);
+  const rows = summarizeTasks([newStyle, oldStyle], ME);
+  assert.equal(rows.length, 2);
+  assert.equal(rows.find((r) => r.id === "lh1").seconds, 3600);
+});

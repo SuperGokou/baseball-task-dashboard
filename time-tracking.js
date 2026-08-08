@@ -37,13 +37,8 @@ function aggregateWeeklyHours(tasks, profileId) {
   const allTaskIds = new Set();
 
   for (const task of Array.isArray(tasks) ? tasks : []) {
-    const activities = Array.isArray(task?.annotationProjectActivities)
-      ? task.annotationProjectActivities
-      : [];
-    for (const activity of activities) {
-      if (activity?.profileId !== profileId) continue;
-      const seconds = activity?.timeWorkedInSeconds;
-      if (!Number.isFinite(seconds) || seconds <= 0) continue;
+    for (const activity of myActivities(task, profileId)) {
+      const seconds = activity.timeWorkedInSeconds;
       const week = weekStartPT(activity.createdAt);
       if (!week) continue;
 
@@ -124,9 +119,16 @@ function dayLabel(day) {
 
 /** A fellow's own positive-time activities on a task. */
 function myActivities(task, profileId) {
-  const activities = Array.isArray(task?.annotationProjectActivities)
+  // Newer project types (e.g. env/persona tasks) leave annotationProjectActivities
+  // empty and ship the activity log under $related.projectActivities instead.
+  // Older tasks carry the same rows in both places, so prefer the classic field
+  // and fall back rather than merging (merging would double-count).
+  let activities = Array.isArray(task?.annotationProjectActivities)
     ? task.annotationProjectActivities
     : [];
+  if (activities.length === 0 && Array.isArray(task?.$related?.projectActivities)) {
+    activities = task.$related.projectActivities;
+  }
   return activities.filter(
     (a) =>
       a?.profileId === profileId &&
