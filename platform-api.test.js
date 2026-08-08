@@ -531,3 +531,35 @@ test("fetchWeeklyHoursDashboard records a warning when one project fails", async
   assert.equal(result.warnings.length, 1);
   assert.match(result.warnings[0], /Broken/);
 });
+
+const { fetchTasksPage } = require("./platform-api");
+
+test("fetchTasksPage retries a 429 rate-limit then succeeds", async () => {
+  let calls = 0;
+  const fakeFetch = async () => {
+    calls += 1;
+    if (calls < 3) {
+      return { status: 429, ok: false, headers: { get: () => null }, json: async () => ({}) };
+    }
+    return { status: 200, ok: true, headers: { get: () => null }, json: async () => richTasksPayload([{ id: "t1" }]) };
+  };
+  const payload = await fetchTasksPage(PROJECT_URL, STORAGE, 10, 0, {
+    fetch: fakeFetch,
+    sleep: async () => {},
+  });
+  assert.equal(calls, 3, "two 429s should be retried before success");
+  assert.equal(payload[0].result.data.json.activeTasks[0].id, "t1");
+});
+
+test("fetchTasksPage gives up after exhausting rate-limit retries", async () => {
+  let calls = 0;
+  const fakeFetch = async () => {
+    calls += 1;
+    return { status: 429, ok: false, headers: { get: () => null }, json: async () => ({}) };
+  };
+  await assert.rejects(
+    fetchTasksPage(PROJECT_URL, STORAGE, 10, 0, { fetch: fakeFetch, sleep: async () => {}, rateLimitAttempts: 3 }),
+    /status 429/
+  );
+  assert.equal(calls, 3);
+});

@@ -199,6 +199,21 @@ function mergeClaimedTasksWithPastHistory(claimedTasks, historyRows, projectId) 
   return [...byId.values()];
 }
 
+// 429 = rate limited, 502-504 = gateway/service hiccups. All are worth retrying;
+// the platform rate-limits when many projects are paged back to back.
+const TRANSIENT_STATUSES = new Set([429, 502, 503, 504]);
+
+function isTransientStatus(status) {
+  return TRANSIENT_STATUSES.has(status);
+}
+
+/** Backoff for a transient response: honor Retry-After, else use the fallback. */
+function backoffMs(response, fallbackMs) {
+  const header = Number(response.headers?.get?.("retry-after"));
+  if (Number.isFinite(header) && header > 0) return Math.min(header * 1000, 20000);
+  return fallbackMs;
+}
+
 async function fetchTrpc(procedure, input, storageState, options = {}) {
   const url = buildTrpcUrl(procedure, input);
   const cookieHeader = createCookieHeader(storageState, url);
@@ -208,8 +223,8 @@ async function fetchTrpc(procedure, input, storageState, options = {}) {
   }
 
   const fetchImpl = options.fetch || fetch;
-  const maxAttempts = options.maxAttempts ?? 3;
-  const retryDelayMs = options.retryDelayMs ?? 600;
+  const maxAttempts = options.maxAttempts ?? 5;
+  const retryDelayMs = options.retryDelayMs ?? 700;
   const sleep = options.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
 
   let response;
@@ -224,12 +239,9 @@ async function fetchTrpc(procedure, input, storageState, options = {}) {
       },
     });
 
-    const transient =
-      response.status === 502 ||
-      response.status === 503 ||
-      response.status === 504;
-    if (transient && attempt < maxAttempts) {
-      await sleep(retryDelayMs * attempt);
+    if (isTransientStatus(response.status) && attempt < maxAttempts) {
+      // Exponential backoff (capped), or the server's Retry-After if provided.
+      await sleep(backoffMs(response, Math.min(retryDelayMs * 2 ** (attempt - 1), 8000)));
       continue;
     }
     break;
@@ -238,9 +250,9 @@ async function fetchTrpc(procedure, input, storageState, options = {}) {
   if (response.status === 401 || response.status === 403) {
     throw new Error("Login expired. Sign in again.");
   }
-  if (response.status >= 502 && response.status <= 504) {
+  if (isTransientStatus(response.status)) {
     throw new Error(
-      `Service is temporarily unavailable (${response.status}). Try again in a moment.`
+      `Service is busy (${response.status}). Try again in a moment.`
     );
   }
   if (!response.ok) {
@@ -250,7 +262,7 @@ async function fetchTrpc(procedure, input, storageState, options = {}) {
   return extractTrpcJson(await response.json(), procedure);
 }
 
-async function fetchTasksPage(projectUrl, storageState, limit, offset) {
+async function fetchTasksPage(projectUrl, storageState, limit, offset, options = {}) {
   const projectId = getProjectId(projectUrl);
   const apiUrl = buildTasksUrl(projectUrl, projectId, limit, offset);
   const cookieHeader = createCookieHeader(storageState, apiUrl);
@@ -259,15 +271,30 @@ async function fetchTasksPage(projectUrl, storageState, limit, offset) {
     throw new Error("Session is not connected.");
   }
 
-  const response = await fetch(apiUrl, {
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      Cookie: cookieHeader,
-      Referer: projectUrl,
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
-    },
-  });
+  const fetchImpl = options.fetch || fetch;
+  const sleep = options.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const maxAttempts = options.rateLimitAttempts ?? 5;
+
+  let response;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    response = await fetchImpl(apiUrl, {
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        Cookie: cookieHeader,
+        Referer: projectUrl,
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+      },
+    });
+
+    // Retry rate-limits/gateway errors here (500s pass through to the adaptive
+    // page-size logic, which shrinks the window when it overruns the last task).
+    if (isTransientStatus(response.status) && attempt < maxAttempts) {
+      await sleep(backoffMs(response, 600 * 2 ** (attempt - 1)));
+      continue;
+    }
+    break;
+  }
 
   if (response.status === 401 || response.status === 403) {
     throw new Error("Login expired. Sign in again.");
@@ -590,8 +617,11 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
   const warnings = [];
   const allTasks = [];
   const projectSummaries = [];
+  const interProjectDelayMs = options.interProjectDelayMs ?? 120;
 
-  for (const project of projects) {
+  for (let i = 0; i < projects.length; i += 1) {
+    const project = projects[i];
+    if (i > 0 && interProjectDelayMs > 0) await delay(interProjectDelayMs);
     try {
       const tasks = await _fetchTasks(project.id, storageState, options);
       allTasks.push(...tasks);
@@ -681,6 +711,7 @@ module.exports = {
   extractTasks,
   fetchAllTasks,
   fetchAllTasksForProject,
+  fetchTasksPage,
   fetchDashboardForProject,
   fetchWeeklyHoursDashboard,
   getHoursWorked,

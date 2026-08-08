@@ -1,5 +1,12 @@
 # Weekly Hours Dashboard
 
+![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A5%2018-5b5bd6)
+![Tests](https://img.shields.io/badge/tests-47%20passing-2f6f4f)
+![Login](https://img.shields.io/badge/login-Playwright-2563eb)
+![Timezone](https://img.shields.io/badge/time-Pacific%20(PT)-7c3aed)
+![Runs](https://img.shields.io/badge/runs-100%25%20local-b45309)
+![Deps](https://img.shields.io/badge/dependencies-playwright%20only-64748b)
+
 A local dashboard that shows **how much time you spent working on HAI tasks** — day by
 day, across **all** of your projects. Everything runs on your machine; nothing is
 hosted online.
