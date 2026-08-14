@@ -199,6 +199,11 @@ function mergeClaimedTasksWithPastHistory(claimedTasks, historyRows, projectId) 
   return [...byId.values()];
 }
 
+// Must be a WELL-FORMED Chrome UA (including "(KHTML, like Gecko)") — the
+// platform's WAF 403s task endpoints when the UA string looks malformed.
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36";
+
 // 429 = rate limited, 502-504 = gateway/service hiccups. All are worth retrying;
 // the platform rate-limits when many projects are paged back to back.
 const TRANSIENT_STATUSES = new Set([429, 502, 503, 504]);
@@ -234,8 +239,7 @@ async function fetchTrpc(procedure, input, storageState, options = {}) {
         Accept: "application/json, text/plain, */*",
         Cookie: cookieHeader,
         Referer: options.referer || DEFAULT_REFERER,
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_USER_AGENT,
       },
     });
 
@@ -282,8 +286,7 @@ async function fetchTasksPage(projectUrl, storageState, limit, offset, options =
         Accept: "application/json, text/plain, */*",
         Cookie: cookieHeader,
         Referer: projectUrl,
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/147.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_USER_AGENT,
       },
     });
 
