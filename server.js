@@ -75,6 +75,7 @@ const DASHBOARD_CACHE_PATH = path.join(__dirname, "dashboard-cache.json");
 const DASHBOARD_CACHE_FRESH_MS = 10 * 60 * 1000;
 const BACKGROUND_SYNC_INTERVAL_MS = 10 * 60 * 1000;
 const BACKGROUND_SYNC_STALE_MS = 30 * 60 * 1000;
+const BACKGROUND_SYNC_BACKOFF_MS = 30 * 60 * 1000;
 
 function loadDashboardCache() {
   try {
@@ -439,6 +440,7 @@ function createAppServer(options = {}) {
   // Background auto-sync: keep the cache warm so the page always opens
   // instantly with data. Runs a quota-friendly sweep when the cache is stale;
   // failures are logged and the last good cache keeps serving.
+  let lastSyncAttemptAt = 0;
   async function backgroundSync() {
     const authState = loadAuthFromDisk();
     if (!authState || dashboardInFlight) return;
@@ -447,6 +449,10 @@ function createAppServer(options = {}) {
       ? Date.now() - new Date(cached.generatedAt).getTime()
       : Infinity;
     if (ageMs < BACKGROUND_SYNC_STALE_MS) return;
+    // Sweeps are quota-limited; hammering after a failure keeps the quota
+    // exhausted. Never attempt more often than the backoff window.
+    if (Date.now() - lastSyncAttemptAt < BACKGROUND_SYNC_BACKOFF_MS) return;
+    lastSyncAttemptAt = Date.now();
     try {
       dashboardInFlight = api.fetchWeeklyHoursDashboard(authState).finally(() => {
         dashboardInFlight = null;
