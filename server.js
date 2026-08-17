@@ -208,14 +208,33 @@ function getLoginStartUrl() {
   return "https://ai.joinhandshake.com/fellow/projects";
 }
 
+const LOGIN_PROFILE_DIR = path.join(__dirname, ".login-profile");
+
 async function launchLoginSession(chromium, log = console.log) {
+  // Prefer the REAL installed Google Chrome with a persistent profile dedicated
+  // to this app: Google/the platform block it far less than bare Chromium, and
+  // the profile stays signed in, so later logins usually complete instantly.
+  try {
+    const context = await chromium.launchPersistentContext(LOGIN_PROFILE_DIR, {
+      channel: "chrome",
+      headless: false,
+    });
+    log("[login] Using installed Google Chrome (persistent profile)");
+    return { context, browser: null };
+  } catch (err) {
+    log(`[login] Chrome unavailable, falling back to Playwright Chromium (${String(err.message).split("\n")[0]})`);
+  }
   const browser = await chromium.launch({ headless: false });
   log("[login] Using Playwright Chromium");
   return { context: await browser.newContext(), browser };
 }
 
 async function closeLoginSession(session) {
-  await session.browser.close().catch(() => {});
+  if (session.browser) {
+    await session.browser.close().catch(() => {});
+  } else {
+    await session.context.close().catch(() => {});
+  }
 }
 
 function createLoginManager(options = {}) {
@@ -297,7 +316,8 @@ function createLoginManager(options = {}) {
       if (flow.pollHandle) clearInterval(flow.pollHandle);
       flows.delete(sessionId);
     };
-    browser.on("disconnected", onLoginWindowClosed);
+    if (browser) browser.on("disconnected", onLoginWindowClosed);
+    else context.on("close", onLoginWindowClosed);
 
     await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
 
