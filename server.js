@@ -72,6 +72,7 @@ function deleteAuthFromDisk() {
 }
 
 const DASHBOARD_CACHE_PATH = path.join(__dirname, "dashboard-cache.json");
+const DASHBOARD_CACHE_FRESH_MS = 10 * 60 * 1000;
 
 function loadDashboardCache() {
   try {
@@ -428,6 +429,11 @@ function createAppServer(options = {}) {
   const sweepInterval = setInterval(() => sessions.sweep(), SESSION_SWEEP_MS);
   sweepInterval.unref?.();
 
+  // Only one platform sweep at a time: concurrent /api/dashboard requests
+  // (multiple tabs, impatient refreshes) share the in-flight fetch instead of
+  // stacking sweeps, which triggers the platform's account-level throttling.
+  let dashboardInFlight = null;
+
   const server = http.createServer(async (req, res) => {
     setSecurityHeaders(res);
     const url = new URL(req.url, "http://localhost");
@@ -503,8 +509,26 @@ function createAppServer(options = {}) {
           sendJson(res, 401, { error: "Sign in first." });
           return;
         }
+        // Serve a recent cache without touching the platform: full sweeps are
+        // quota-limited per account, so only Refresh (force) bypasses this.
+        const body = await readRequestBody(req).catch(() => ({}));
+        const freshCache = loadDashboardCache();
+        const cacheAgeMs = freshCache
+          ? Date.now() - new Date(freshCache.generatedAt).getTime()
+          : Infinity;
+        if (!body.force && freshCache && freshCache.totals.taskCount > 0 && cacheAgeMs < DASHBOARD_CACHE_FRESH_MS) {
+          sendJson(res, 200, freshCache);
+          return;
+        }
         try {
-          const dashboard = await api.fetchWeeklyHoursDashboard(session.authState);
+          if (!dashboardInFlight) {
+            dashboardInFlight = api
+              .fetchWeeklyHoursDashboard(session.authState)
+              .finally(() => {
+                dashboardInFlight = null;
+              });
+          }
+          const dashboard = await dashboardInFlight;
           const cached = loadDashboardCache();
           if (dashboard.totals.taskCount > 0) {
             saveDashboardCache(dashboard);

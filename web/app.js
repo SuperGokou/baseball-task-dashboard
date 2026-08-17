@@ -464,11 +464,11 @@ function renderDashboard(d) {
   if (d.warnings && d.warnings.length) showMessage(d.warnings.join(" "));
 }
 
-async function loadDashboard() {
+async function loadDashboard(force = false) {
   elements.loadingState.hidden = false;
   elements.dashboard.hidden = true;
   try {
-    const data = await api("/api/dashboard", { method: "POST", body: JSON.stringify({}) });
+    const data = await api("/api/dashboard", { method: "POST", body: JSON.stringify({ force: force === true }) });
     renderDashboard(data);
     elements.dashboard.hidden = false;
   } catch (err) {
@@ -545,7 +545,7 @@ async function onLogout() {
 elements.connectButton?.addEventListener("click", onConnect);
 elements.saveLoginButton?.addEventListener("click", onSaveLogin);
 elements.logoutButton?.addEventListener("click", onLogout);
-elements.refreshButton?.addEventListener("click", loadDashboard);
+elements.refreshButton?.addEventListener("click", () => loadDashboard(true));
 elements.messageDismiss?.addEventListener("click", clearMessage);
 elements.projectFilter?.addEventListener("change", (e) => {
   state.selectedProjectId = e.target.value;
