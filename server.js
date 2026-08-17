@@ -73,6 +73,8 @@ function deleteAuthFromDisk() {
 
 const DASHBOARD_CACHE_PATH = path.join(__dirname, "dashboard-cache.json");
 const DASHBOARD_CACHE_FRESH_MS = 10 * 60 * 1000;
+const BACKGROUND_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+const BACKGROUND_SYNC_STALE_MS = 30 * 60 * 1000;
 
 function loadDashboardCache() {
   try {
@@ -434,6 +436,37 @@ function createAppServer(options = {}) {
   // stacking sweeps, which triggers the platform's account-level throttling.
   let dashboardInFlight = null;
 
+  // Background auto-sync: keep the cache warm so the page always opens
+  // instantly with data. Runs a quota-friendly sweep when the cache is stale;
+  // failures are logged and the last good cache keeps serving.
+  async function backgroundSync() {
+    const authState = loadAuthFromDisk();
+    if (!authState || dashboardInFlight) return;
+    const cached = loadDashboardCache();
+    const ageMs = cached
+      ? Date.now() - new Date(cached.generatedAt).getTime()
+      : Infinity;
+    if (ageMs < BACKGROUND_SYNC_STALE_MS) return;
+    try {
+      dashboardInFlight = api.fetchWeeklyHoursDashboard(authState).finally(() => {
+        dashboardInFlight = null;
+      });
+      const dashboard = await dashboardInFlight;
+      if (dashboard.totals.taskCount > 0) {
+        saveDashboardCache(dashboard);
+        console.log(`[sync] cache refreshed: ${dashboard.totals.taskCount} tasks, ${dashboard.totals.hours}h`);
+      } else {
+        console.warn("[sync] platform returned no tasks (quota?); keeping previous cache");
+      }
+    } catch (err) {
+      console.warn(`[sync] background refresh failed: ${err.message}`);
+    }
+  }
+  const syncInterval = setInterval(backgroundSync, BACKGROUND_SYNC_INTERVAL_MS);
+  syncInterval.unref?.();
+  const initialSync = setTimeout(backgroundSync, 15 * 1000);
+  initialSync.unref?.();
+
   const server = http.createServer(async (req, res) => {
     setSecurityHeaders(res);
     const url = new URL(req.url, "http://localhost");
@@ -578,12 +611,23 @@ function createAppServer(options = {}) {
     }
   });
 
-  server.on("close", () => clearInterval(sweepInterval));
+  server.on("close", () => {
+    clearInterval(sweepInterval);
+    clearInterval(syncInterval);
+    clearTimeout(initialSync);
+  });
   return server;
 }
 
 if (require.main === module) {
   const server = createAppServer();
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.log(`Port ${DEFAULT_PORT} is already in use — dashboard is probably already running.`);
+      process.exit(0);
+    }
+    throw err;
+  });
   server.listen(DEFAULT_PORT, () => {
     console.log(
       `Server running at http://localhost:${DEFAULT_PORT} (${
