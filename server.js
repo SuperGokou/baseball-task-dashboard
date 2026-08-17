@@ -71,6 +71,26 @@ function deleteAuthFromDisk() {
   }
 }
 
+const DASHBOARD_CACHE_PATH = path.join(__dirname, "dashboard-cache.json");
+
+function loadDashboardCache() {
+  try {
+    if (!fs.existsSync(DASHBOARD_CACHE_PATH)) return null;
+    const parsed = JSON.parse(fs.readFileSync(DASHBOARD_CACHE_PATH, "utf8"));
+    return parsed && parsed.totals ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDashboardCache(dashboard) {
+  try {
+    fs.writeFileSync(DASHBOARD_CACHE_PATH, JSON.stringify(dashboard));
+  } catch (err) {
+    console.warn(`[cache] failed to persist dashboard cache: ${err.message}`);
+  }
+}
+
 function setSecurityHeaders(res) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -485,12 +505,38 @@ function createAppServer(options = {}) {
         }
         try {
           const dashboard = await api.fetchWeeklyHoursDashboard(session.authState);
-          sendJson(res, 200, dashboard);
+          const cached = loadDashboardCache();
+          if (dashboard.totals.taskCount > 0) {
+            saveDashboardCache(dashboard);
+            sendJson(res, 200, dashboard);
+          } else if (cached && cached.totals.taskCount > 0) {
+            // The platform sometimes soft-throttles by returning empty task
+            // lists with 200s. Zeros with a previously non-empty account is
+            // almost certainly that — show the last good sync instead.
+            sendJson(res, 200, {
+              ...cached,
+              warnings: [
+                `The platform returned no tasks (likely temporary throttling). Showing the last good sync from ${new Date(cached.generatedAt).toLocaleString()}. Try Refresh later.`,
+              ],
+            });
+          } else {
+            sendJson(res, 200, dashboard);
+          }
         } catch (err) {
           if (/expired|401|403/i.test(err.message)) {
             sessions.clear(sessionId);
             deleteAuthFromDisk();
             sendJson(res, 401, { error: "Session expired. Sign in again." });
+            return;
+          }
+          const cached = loadDashboardCache();
+          if (cached && cached.totals.taskCount > 0) {
+            sendJson(res, 200, {
+              ...cached,
+              warnings: [
+                `Live refresh failed (${err.message}). Showing the last good sync from ${new Date(cached.generatedAt).toLocaleString()}.`,
+              ],
+            });
             return;
           }
           throw err;
