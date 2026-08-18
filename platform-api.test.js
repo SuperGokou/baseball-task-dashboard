@@ -491,6 +491,7 @@ test("fetchWeeklyHoursDashboard aggregates tasks across all projects", async () 
     },
     getHoursWorked: async () => ({ totalSeconds: 5400, totalHours: 1.5 }),
     fetchPayActivities: async () => [],
+    interProjectDelayMs: 0,
     now: () => "2026-06-10T00:00:00.000Z",
   };
   const result = await fetchWeeklyHoursDashboard(STORAGE, deps);
@@ -524,6 +525,7 @@ test("fetchWeeklyHoursDashboard records a warning when one project fails", async
     },
     getHoursWorked: async () => ({ totalSeconds: 3600, totalHours: 1 }),
     fetchPayActivities: async () => [],
+    interProjectDelayMs: 0,
     now: () => "2026-06-10T00:00:00.000Z",
   };
   const result = await fetchWeeklyHoursDashboard(STORAGE, deps);
@@ -562,4 +564,27 @@ test("fetchTasksPage gives up after exhausting rate-limit retries", async () => 
     /status 429/
   );
   assert.equal(calls, 3);
+});
+
+const { buildDashboardFromProjects } = require("./platform-api");
+
+test("buildDashboardFromProjects assembles the dashboard from per-project raw tasks", () => {
+  const profile = { id: "me", name: "Ming" };
+  const entries = [
+    { id: "pA", name: "A", kind: "active", tasks: [{ id: "t1", annotationProjectActivities: [
+      { profileId: "me", timeWorkedInSeconds: 3600, createdAt: "2026-05-18T09:00:00Z" }] }] },
+    { id: "pB", name: "B", kind: "past", tasks: [] },
+  ];
+  const d = buildDashboardFromProjects(profile, entries, {
+    lifetime: { totalHours: 1, totalSeconds: 3600 },
+    warnings: ["warming"],
+    now: () => "2026-08-17T00:00:00.000Z",
+  });
+  assert.equal(d.totals.seconds, 3600);
+  assert.equal(d.projects.length, 2);
+  assert.equal(d.projects[0].taskCount, 1);
+  assert.equal(d.projects[1].taskCount, 0);
+  assert.deepEqual(d.warnings, ["warming"]);
+  assert.equal(d.generatedAt, "2026-08-17T00:00:00.000Z");
+  assert.equal(d.lifetime.totalHours, 1);
 });

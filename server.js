@@ -72,10 +72,28 @@ function deleteAuthFromDisk() {
 }
 
 const DASHBOARD_CACHE_PATH = path.join(__dirname, "dashboard-cache.json");
-const DASHBOARD_CACHE_FRESH_MS = 10 * 60 * 1000;
-const BACKGROUND_SYNC_INTERVAL_MS = 10 * 60 * 1000;
-const BACKGROUND_SYNC_STALE_MS = 30 * 60 * 1000;
-const BACKGROUND_SYNC_BACKOFF_MS = 30 * 60 * 1000;
+const PROJECT_STORE_PATH = path.join(__dirname, "project-cache.json");
+const SYNC_TICK_MS = 45 * 1000;
+const META_REFRESH_MS = 15 * 60 * 1000;
+const PROJECT_REFRESH_MS = 20 * 60 * 1000;
+
+function loadProjectStore() {
+  try {
+    if (fs.existsSync(PROJECT_STORE_PATH)) {
+      const parsed = JSON.parse(fs.readFileSync(PROJECT_STORE_PATH, "utf8"));
+      if (parsed && typeof parsed === "object" && parsed.projects) return parsed;
+    }
+  } catch {}
+  return { projects: {}, meta: null };
+}
+
+function saveProjectStore(store) {
+  try {
+    fs.writeFileSync(PROJECT_STORE_PATH, JSON.stringify(store));
+  } catch (err) {
+    console.warn(`[cache] failed to persist project store: ${err.message}`);
+  }
+}
 
 function loadDashboardCache() {
   try {
@@ -432,45 +450,91 @@ function createAppServer(options = {}) {
   const sweepInterval = setInterval(() => sessions.sweep(), SESSION_SWEEP_MS);
   sweepInterval.unref?.();
 
-  // Only one platform sweep at a time: concurrent /api/dashboard requests
-  // (multiple tabs, impatient refreshes) share the in-flight fetch instead of
-  // stacking sweeps, which triggers the platform's account-level throttling.
-  let dashboardInFlight = null;
+  // ---- Rolling sync ------------------------------------------------------
+  // Full multi-project sweeps get soft-throttled by the platform (200s with
+  // EMPTY task lists), but single-project fetches are reliable. So each tick
+  // fetches at most ONE thing (the meta bundle, or one project's tasks) and
+  // keeps an assembled dashboard cached — the UI always reads the cache.
+  const store = loadProjectStore();
+  let syncing = false;
 
-  // Background auto-sync: keep the cache warm so the page always opens
-  // instantly with data. Runs a quota-friendly sweep when the cache is stale;
-  // failures are logged and the last good cache keeps serving.
-  let lastSyncAttemptAt = 0;
-  async function backgroundSync() {
+  function assembleAndCache() {
+    const meta = store.meta;
+    if (!meta?.profile) return;
+    const list = meta.projectList || [];
+    const entries = list.map((p) => ({
+      ...p,
+      tasks: store.projects[p.id]?.tasks || [],
+    }));
+    const pending = list.filter((p) => !store.projects[p.id]).length;
+    const warnings = pending
+      ? [`Syncing ${pending} of ${list.length} projects — data completes over the next few minutes.`]
+      : [];
+    const dashboard = api.buildDashboardFromProjects(meta.profile, entries, {
+      lifetime: meta.lifetime,
+      payRecords: meta.payRecords,
+      warnings,
+    });
+    saveDashboardCache(dashboard);
+  }
+
+  async function syncTick() {
+    if (syncing) return;
     const authState = loadAuthFromDisk();
-    if (!authState || dashboardInFlight) return;
-    const cached = loadDashboardCache();
-    const ageMs = cached
-      ? Date.now() - new Date(cached.generatedAt).getTime()
-      : Infinity;
-    if (ageMs < BACKGROUND_SYNC_STALE_MS) return;
-    // Sweeps are quota-limited; hammering after a failure keeps the quota
-    // exhausted. Never attempt more often than the backoff window.
-    if (Date.now() - lastSyncAttemptAt < BACKGROUND_SYNC_BACKOFF_MS) return;
-    lastSyncAttemptAt = Date.now();
+    if (!authState) return;
+    syncing = true;
     try {
-      dashboardInFlight = api.fetchWeeklyHoursDashboard(authState).finally(() => {
-        dashboardInFlight = null;
-      });
-      const dashboard = await dashboardInFlight;
-      if (dashboard.totals.taskCount > 0) {
-        saveDashboardCache(dashboard);
-        console.log(`[sync] cache refreshed: ${dashboard.totals.taskCount} tasks, ${dashboard.totals.hours}h`);
+      const metaAge = Date.now() - (store.meta?.metaFetchedAt || 0);
+      if (!store.meta?.profile || metaAge > META_REFRESH_MS) {
+        const profile = await api.fetchProfile(authState);
+        const projectList = await api.listProjects(authState, profile.id);
+        let lifetime = store.meta?.lifetime || null;
+        try {
+          lifetime = await api.getHoursWorked(authState, profile.id);
+        } catch {}
+        let payRecords = store.meta?.payRecords || [];
+        try {
+          payRecords = await api.fetchCurrentWeekPayActivities(authState, profile.id);
+        } catch {}
+        store.meta = {
+          profile: { id: profile.id, name: profile.name || profile.fullName || "User" },
+          projectList,
+          lifetime,
+          payRecords,
+          metaFetchedAt: Date.now(),
+        };
+        console.log(`[sync] meta refreshed: ${projectList.length} projects`);
       } else {
-        console.warn("[sync] platform returned no tasks (quota?); keeping previous cache");
+        const list = store.meta.projectList || [];
+        const next = list
+          .map((p) => ({ p, at: store.projects[p.id]?.fetchedAt || 0 }))
+          .sort((a, b) => a.at - b.at)[0];
+        if (next && Date.now() - next.at > PROJECT_REFRESH_MS) {
+          const tasks = await api.fetchAllTasksForProject(next.p.id, authState);
+          const previous = store.projects[next.p.id];
+          if (tasks.length > 0 || !previous || previous.tasks.length === 0) {
+            store.projects[next.p.id] = { fetchedAt: Date.now(), tasks };
+          } else {
+            // A previously non-empty project coming back empty is almost
+            // always throttling — keep the old tasks, just rotate onward.
+            store.projects[next.p.id] = { ...previous, fetchedAt: Date.now() };
+            console.warn(`[sync] ${next.p.name} returned empty; keeping previous data`);
+          }
+          console.log(`[sync] ${next.p.name}: ${tasks.length} tasks`);
+        }
       }
+      assembleAndCache();
+      saveProjectStore(store);
     } catch (err) {
-      console.warn(`[sync] background refresh failed: ${err.message}`);
+      console.warn(`[sync] tick failed: ${err.message}`);
+    } finally {
+      syncing = false;
     }
   }
-  const syncInterval = setInterval(backgroundSync, BACKGROUND_SYNC_INTERVAL_MS);
+
+  const syncInterval = setInterval(syncTick, SYNC_TICK_MS);
   syncInterval.unref?.();
-  const initialSync = setTimeout(backgroundSync, 15 * 1000);
+  const initialSync = setTimeout(syncTick, 5 * 1000);
   initialSync.unref?.();
 
   const server = http.createServer(async (req, res) => {
@@ -548,62 +612,30 @@ function createAppServer(options = {}) {
           sendJson(res, 401, { error: "Sign in first." });
           return;
         }
-        // Serve a recent cache without touching the platform: full sweeps are
-        // quota-limited per account, so only Refresh (force) bypasses this.
+        // The dashboard is always served from the rolling-sync cache; the
+        // route itself never sweeps the platform. Refresh (force) just runs
+        // one extra sync tick (a single small fetch) before responding.
         const body = await readRequestBody(req).catch(() => ({}));
-        const freshCache = loadDashboardCache();
-        const cacheAgeMs = freshCache
-          ? Date.now() - new Date(freshCache.generatedAt).getTime()
-          : Infinity;
-        if (!body.force && freshCache && freshCache.totals.taskCount > 0 && cacheAgeMs < DASHBOARD_CACHE_FRESH_MS) {
-          sendJson(res, 200, freshCache);
+        if (body.force) {
+          await syncTick();
+        }
+        const cached = loadDashboardCache();
+        if (cached) {
+          sendJson(res, 200, cached);
           return;
         }
-        try {
-          if (!dashboardInFlight) {
-            dashboardInFlight = api
-              .fetchWeeklyHoursDashboard(session.authState)
-              .finally(() => {
-                dashboardInFlight = null;
-              });
-          }
-          const dashboard = await dashboardInFlight;
-          const cached = loadDashboardCache();
-          if (dashboard.totals.taskCount > 0) {
-            saveDashboardCache(dashboard);
-            sendJson(res, 200, dashboard);
-          } else if (cached && cached.totals.taskCount > 0) {
-            // The platform sometimes soft-throttles by returning empty task
-            // lists with 200s. Zeros with a previously non-empty account is
-            // almost certainly that — show the last good sync instead.
-            sendJson(res, 200, {
-              ...cached,
-              warnings: [
-                `The platform returned no tasks (likely temporary throttling). Showing the last good sync from ${new Date(cached.generatedAt).toLocaleString()}. Try Refresh later.`,
-              ],
-            });
-          } else {
-            sendJson(res, 200, dashboard);
-          }
-        } catch (err) {
-          if (/expired|401|403/i.test(err.message)) {
-            sessions.clear(sessionId);
-            deleteAuthFromDisk();
-            sendJson(res, 401, { error: "Session expired. Sign in again." });
-            return;
-          }
-          const cached = loadDashboardCache();
-          if (cached && cached.totals.taskCount > 0) {
-            sendJson(res, 200, {
-              ...cached,
-              warnings: [
-                `Live refresh failed (${err.message}). Showing the last good sync from ${new Date(cached.generatedAt).toLocaleString()}.`,
-              ],
-            });
-            return;
-          }
-          throw err;
-        }
+        sendJson(res, 200, {
+          warming: true,
+          generatedAt: new Date().toISOString(),
+          profile: null,
+          lifetime: { totalHours: 0, totalSeconds: 0 },
+          weeks: [],
+          days: [],
+          totals: { seconds: 0, hours: 0, taskCount: 0, weekCount: 0 },
+          projects: [],
+          payTasks: [],
+          warnings: ["First sync is running — your data will appear here automatically over the next few minutes."],
+        });
         return;
       }
 

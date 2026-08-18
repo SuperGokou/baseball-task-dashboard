@@ -37,6 +37,7 @@ const state = {
   selectedStage: "all",
   searchText: "",
   selectedDay: null,
+  warmupTimer: null,
 };
 
 function showMessage(text) {
@@ -471,6 +472,11 @@ async function loadDashboard(force = false) {
     const data = await api("/api/dashboard", { method: "POST", body: JSON.stringify({ force: force === true }) });
     renderDashboard(data);
     elements.dashboard.hidden = false;
+    // While the rolling sync is still filling in projects, reload on our own
+    // so the numbers grow without the user having to press anything.
+    const stillFilling = data.warming || (data.warnings || []).some((w) => /Syncing \d+ of/.test(w));
+    clearTimeout(state.warmupTimer);
+    if (stillFilling) state.warmupTimer = setTimeout(() => loadDashboard(), 20000);
   } catch (err) {
     showMessage(err.message);
     if (/sign in|expired/i.test(err.message)) setConnected(false);

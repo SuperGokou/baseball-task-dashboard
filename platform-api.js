@@ -620,11 +620,13 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
   const warnings = [];
   const allTasks = [];
   const projectSummaries = [];
-  const interProjectDelayMs = options.interProjectDelayMs ?? 120;
+  // The platform soft-throttles rapid multi-project sweeps by returning EMPTY
+  // task lists (200s, no error). ~3s between projects reliably avoids that.
+  const interProjectDelayMs = options.interProjectDelayMs ?? 3000;
 
   for (let i = 0; i < projects.length; i += 1) {
     const project = projects[i];
-    if (i > 0 && interProjectDelayMs > 0) await delay(interProjectDelayMs);
+    if (interProjectDelayMs > 0) await delay(interProjectDelayMs);
     try {
       const tasks = await _fetchTasks(project.id, storageState, options);
       allTasks.push(...tasks);
@@ -680,6 +682,64 @@ async function fetchWeeklyHoursDashboard(storageState, options = {}) {
   };
 }
 
+/**
+ * Assemble the dashboard payload from already-fetched raw tasks per project.
+ * Used by the rolling sync, which fetches one project at a time instead of
+ * sweeping every project in one burst (bursts get soft-throttled to empties).
+ * @param {{id:string,name?:string,fullName?:string}} profile
+ * @param {Array<{id:string,name:string,kind:string,tasks:Array<object>}>} projectEntries
+ * @param {{lifetime?:object,payRecords?:Array<object>,warnings?:Array<string>,now?:Function}} extras
+ */
+function buildDashboardFromProjects(profile, projectEntries, extras = {}) {
+  const profileId = profile?.id;
+  if (!profileId) throw new Error("Could not resolve profile id.");
+  const warnings = [...(extras.warnings || [])];
+  const now = extras.now || (() => new Date().toISOString());
+
+  const allTasks = [];
+  const projectSummaries = [];
+  for (const entry of projectEntries) {
+    const tasks = Array.isArray(entry.tasks) ? entry.tasks : [];
+    allTasks.push(...tasks);
+    const agg = aggregateWeeklyHours(tasks, profileId);
+    projectSummaries.push({
+      id: entry.id,
+      name: entry.name,
+      kind: entry.kind,
+      taskCount: agg.totals.taskCount,
+      weeks: agg.weeks,
+      days: aggregateDailyHours(tasks, profileId).days,
+      totals: agg.totals,
+      tasks: summarizeTasks(tasks, profileId),
+    });
+  }
+
+  const { weeks, totals } = aggregateWeeklyHours(allTasks, profileId);
+  let { days } = aggregateDailyHours(allTasks, profileId);
+  let payTasks = [];
+  if (Array.isArray(extras.payRecords)) {
+    const merged = mergeCurrentWeekPayActivities(
+      days,
+      allTasks.map((t) => t.id),
+      extras.payRecords
+    );
+    days = merged.days;
+    payTasks = merged.payTasks;
+  }
+
+  return {
+    generatedAt: now(),
+    profile: { id: profileId, name: profile.name || profile.fullName || "User" },
+    lifetime: extras.lifetime || { totalHours: 0, totalSeconds: 0 },
+    weeks,
+    days,
+    totals,
+    projects: projectSummaries,
+    payTasks,
+    warnings,
+  };
+}
+
 function normalizeProjectList(data, kind) {
   const list = data?.annotationProjects || data?.projects || [];
   return (Array.isArray(list) ? list : [])
@@ -717,6 +777,8 @@ module.exports = {
   fetchTasksPage,
   fetchDashboardForProject,
   fetchWeeklyHoursDashboard,
+  buildDashboardFromProjects,
+  fetchCurrentWeekPayActivities,
   getHoursWorked,
   listProjects,
   fetchPastProjectTaskHistory,
