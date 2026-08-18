@@ -215,3 +215,22 @@ test("falls back to $related.projectActivities when annotationProjectActivities 
   assert.equal(rows.length, 2);
   assert.equal(rows.find((r) => r.id === "lh1").seconds, 3600);
 });
+
+test("aggregateDailyHours reads task.history when activity fields are stripped (Aug 2026 platform shape)", () => {
+  const tasks = [{
+    id: "t1",
+    // platform no longer sends annotationProjectActivities;
+    // $related.projectActivities lost its time/date fields
+    $related: { projectActivities: [{ id: "x", activityType: "task_submitted", $related: { profile: { id: ME } } }] },
+    history: [
+      { profileName: "Me", profileId: ME, createdAt: "2026-05-19T16:50:45Z", timeWorkedInSeconds: 132 },
+      { profileName: "Me", profileId: ME, createdAt: "2026-05-19T17:50:45Z", timeWorkedInSeconds: 68 },
+      { profileName: "Other", profileId: "other", createdAt: "2026-05-19T18:00:00Z", timeWorkedInSeconds: 999 },
+    ],
+  }];
+  const { days, totals } = aggregateDailyHours(tasks, ME);
+  assert.equal(totals.seconds, 200);
+  assert.equal(days.length, 1);
+  const rows = summarizeTasks(tasks, ME);
+  assert.equal(rows[0].seconds, 200);
+});

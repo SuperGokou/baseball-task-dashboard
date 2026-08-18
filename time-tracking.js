@@ -117,24 +117,32 @@ function dayLabel(day) {
   return weekLabel(day);
 }
 
-/** A fellow's own positive-time activities on a task. */
+/** A fellow's own positive-time activities on a task.
+ *
+ * The platform has shipped the activity log in several places over time:
+ * annotationProjectActivities (classic), $related.projectActivities, and
+ * history. All carry the SAME rows, so use the first source that yields
+ * usable entries (worked seconds + a date + an owner) — never merge sources,
+ * merging would double-count.
+ */
 function myActivities(task, profileId) {
-  // Newer project types (e.g. env/persona tasks) leave annotationProjectActivities
-  // empty and ship the activity log under $related.projectActivities instead.
-  // Older tasks carry the same rows in both places, so prefer the classic field
-  // and fall back rather than merging (merging would double-count).
-  let activities = Array.isArray(task?.annotationProjectActivities)
-    ? task.annotationProjectActivities
-    : [];
-  if (activities.length === 0 && Array.isArray(task?.$related?.projectActivities)) {
-    activities = task.$related.projectActivities;
+  const sources = [
+    task?.annotationProjectActivities,
+    task?.$related?.projectActivities,
+    task?.history,
+  ];
+  for (const source of sources) {
+    if (!Array.isArray(source) || source.length === 0) continue;
+    const usable = source.filter(
+      (a) =>
+        (a?.profileId === profileId || a?.$related?.profile?.id === profileId) &&
+        Number.isFinite(a?.timeWorkedInSeconds) &&
+        a.timeWorkedInSeconds > 0 &&
+        a?.createdAt
+    );
+    if (usable.length) return usable;
   }
-  return activities.filter(
-    (a) =>
-      a?.profileId === profileId &&
-      Number.isFinite(a?.timeWorkedInSeconds) &&
-      a.timeWorkedInSeconds > 0
-  );
+  return [];
 }
 
 /**
