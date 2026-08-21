@@ -217,17 +217,20 @@ function taskTitle(task) {
 }
 
 /**
- * One row per task the fellow actually worked on, newest first.
+ * One row per claimed task, newest first. Tasks with no recorded time from the
+ * fellow are still listed (00:00:00) so counts match the platform's task list;
+ * they contribute nothing to the hour aggregations.
  * @returns {Array<{id,title,taskKey,stage,seconds,hours,date}>}
  */
 function summarizeTasks(tasks, profileId) {
   const rows = [];
   for (const task of Array.isArray(tasks) ? tasks : []) {
     const acts = myActivities(task, profileId);
-    if (!acts.length) continue;
     const seconds = acts.reduce((sum, a) => sum + a.timeWorkedInSeconds, 0);
     const days = acts.map((a) => a.createdAt).filter(Boolean).sort();
-    const latest = days.length ? days[days.length - 1] : null;
+    const latest = days.length
+      ? days[days.length - 1]
+      : task?.updatedAt || task?.createdAt || null;
     const totalSeconds = Number.isFinite(task?.totalTimeSpentInSeconds)
       ? task.totalTimeSpentInSeconds
       : seconds;

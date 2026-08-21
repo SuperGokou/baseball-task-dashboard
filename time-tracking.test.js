@@ -115,16 +115,22 @@ test("summarizeTasks returns one row per worked task, newest first, summing my t
       ] },
     { id: "t2", data: { pr_title: "Add feature" },
       annotationProjectActivities: [{ profileId: ME, timeWorkedInSeconds: 300, createdAt: "2026-05-25T09:00:00Z" }] },
-    { id: "t3", annotationProjectActivities: [{ profileId: "other", timeWorkedInSeconds: 500, createdAt: "2026-05-20T09:00:00Z" }] },
+    { id: "t3", updatedAt: "2026-05-20T09:00:00Z", totalTimeSpentInSeconds: 0,
+      annotationProjectActivities: [{ profileId: "other", timeWorkedInSeconds: 500, createdAt: "2026-05-20T09:00:00Z" }] },
   ];
   const rows = summarizeTasks(tasks, ME);
-  assert.equal(rows.length, 2); // t3 excluded (none of my time)
+  // t3 has none of my time but is still listed (00:00:00) so counts match
+  // the platform's claimed-task list.
+  assert.equal(rows.length, 3);
   assert.equal(rows[0].id, "t2"); // May 25 newest
-  assert.equal(rows[1].id, "t1");
-  assert.equal(rows[1].seconds, 1800); // 600 + 1200, excludes other's 9999
-  assert.equal(rows[1].title, "Fix bug");
-  assert.equal(rows[1].stage, "Delivered");
-  assert.equal(rows[1].date.slice(0, 10), "2026-05-19");
+  assert.equal(rows[1].id, "t3"); // May 20, zero time, dated by updatedAt
+  assert.equal(rows[1].seconds, 0);
+  assert.equal(rows[1].totalSeconds, 0);
+  assert.equal(rows[2].id, "t1");
+  assert.equal(rows[2].seconds, 1800); // 600 + 1200, excludes other's 9999
+  assert.equal(rows[2].title, "Fix bug");
+  assert.equal(rows[2].stage, "Delivered");
+  assert.equal(rows[2].date.slice(0, 10), "2026-05-19");
 });
 
 test("summarizeTasks derives title from problem_statement/instance_id for SWE-bench tasks", () => {
